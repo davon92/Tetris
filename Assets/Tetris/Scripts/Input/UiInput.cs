@@ -31,34 +31,43 @@ public readonly struct UiInput
     public static UiInput Sample()
     {
         Keyboard keyboard = Keyboard.current;
-        Gamepad gamepad = Gamepad.all.Count > 0 ? Gamepad.all[0] : null;
 
         bool escape = keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
 
-        return new UiInput(
-            up:
-            (keyboard != null &&
-             (keyboard.upArrowKey.wasPressedThisFrame || keyboard.wKey.wasPressedThisFrame)) ||
-            (gamepad != null && gamepad.dpad.up.wasPressedThisFrame),
-            down:
-            (keyboard != null &&
-             (keyboard.downArrowKey.wasPressedThisFrame || keyboard.sKey.wasPressedThisFrame)) ||
-            (gamepad != null && gamepad.dpad.down.wasPressedThisFrame),
-            left:
-            (keyboard != null &&
-             (keyboard.leftArrowKey.wasPressedThisFrame || keyboard.aKey.wasPressedThisFrame)) ||
-            (gamepad != null && gamepad.dpad.left.wasPressedThisFrame),
-            right:
-            (keyboard != null &&
-             (keyboard.rightArrowKey.wasPressedThisFrame || keyboard.dKey.wasPressedThisFrame)) ||
-            (gamepad != null && gamepad.dpad.right.wasPressedThisFrame),
-            confirm:
-            (keyboard != null &&
-             (keyboard.enterKey.wasPressedThisFrame ||
-              keyboard.numpadEnterKey.wasPressedThisFrame ||
-              keyboard.spaceKey.wasPressedThisFrame)) ||
-            (gamepad != null && gamepad.buttonSouth.wasPressedThisFrame),
-            cancel: escape || (gamepad != null && gamepad.buttonEast.wasPressedThisFrame),
-            pause: escape || (gamepad != null && gamepad.startButton.wasPressedThisFrame));
+        bool up = keyboard != null &&
+            (keyboard.upArrowKey.wasPressedThisFrame || keyboard.wKey.wasPressedThisFrame);
+        bool down = keyboard != null &&
+            (keyboard.downArrowKey.wasPressedThisFrame || keyboard.sKey.wasPressedThisFrame);
+        bool left = keyboard != null &&
+            (keyboard.leftArrowKey.wasPressedThisFrame || keyboard.aKey.wasPressedThisFrame);
+        bool right = keyboard != null &&
+            (keyboard.rightArrowKey.wasPressedThisFrame || keyboard.dKey.wasPressedThisFrame);
+        bool confirm = keyboard != null &&
+            (keyboard.enterKey.wasPressedThisFrame ||
+             keyboard.numpadEnterKey.wasPressedThisFrame ||
+             keyboard.spaceKey.wasPressedThisFrame);
+        bool cancel = escape;
+        bool pause = escape;
+
+        // Every connected pad can drive menus — in local versus either player
+        // should be able to navigate — and the left stick counts as a d-pad.
+        var gamepads = Gamepad.all;
+        for (int i = 0; i < gamepads.Count; i++)
+        {
+            Gamepad gamepad = gamepads[i];
+            up |= gamepad.dpad.up.wasPressedThisFrame ||
+                gamepad.leftStick.up.wasPressedThisFrame;
+            down |= gamepad.dpad.down.wasPressedThisFrame ||
+                gamepad.leftStick.down.wasPressedThisFrame;
+            left |= gamepad.dpad.left.wasPressedThisFrame ||
+                gamepad.leftStick.left.wasPressedThisFrame;
+            right |= gamepad.dpad.right.wasPressedThisFrame ||
+                gamepad.leftStick.right.wasPressedThisFrame;
+            confirm |= gamepad.buttonSouth.wasPressedThisFrame;
+            cancel |= gamepad.buttonEast.wasPressedThisFrame;
+            pause |= gamepad.startButton.wasPressedThisFrame;
+        }
+
+        return new UiInput(up, down, left, right, confirm, cancel, pause);
     }
 }

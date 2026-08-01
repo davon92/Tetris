@@ -21,6 +21,26 @@ public sealed class SharedPieceQueue
     public TetriminoType NextType => nextType;
     public float CloseClaimWindow => closeClaimWindow;
 
+    /// <summary>
+    /// The contested upcoming pieces, nearest first. Both players read the same
+    /// queue — fighting over these is the point of the shared bag.
+    /// </summary>
+    public TetriminoType[] PeekUpcoming(int count)
+    {
+        if (count <= 0)
+            return Array.Empty<TetriminoType>();
+
+        TetriminoType[] upcoming = new TetriminoType[count];
+        upcoming[0] = nextType;
+        if (count > 1)
+        {
+            TetriminoType[] fromBag = randomizer.Peek(count - 1);
+            Array.Copy(fromBag, 0, upcoming, 1, count - 1);
+        }
+
+        return upcoming;
+    }
+
     public TetriminoType Claim(object claimant, float claimTime)
     {
         if (claimant == null)

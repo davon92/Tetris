@@ -88,16 +88,37 @@ public static class TetrominoDefinitions
         new Color(0.95f, 0.2f, 0.28f)
     };
 
+    // All 28 rotations precomputed once: GetCells is called every frame by the
+    // HUD and the board views, so it must not allocate. Callers treat the
+    // returned array as read-only.
+    private static readonly Vector2Int[][] CellCache = BuildCellCache();
+
     public static Vector2Int[] GetCells(TetriminoType type, int rotation)
     {
-        int normalizedRotation = NormalizeRotation(rotation);
+        return CellCache[(int)type * 4 + NormalizeRotation(rotation)];
+    }
+
+    private static Vector2Int[][] BuildCellCache()
+    {
+        Vector2Int[][] cache = new Vector2Int[7 * 4][];
+        for (int type = 0; type < 7; type++)
+        {
+            for (int rotation = 0; rotation < 4; rotation++)
+                cache[type * 4 + rotation] = ComputeCells((TetriminoType)type, rotation);
+        }
+
+        return cache;
+    }
+
+    private static Vector2Int[] ComputeCells(TetriminoType type, int rotation)
+    {
         if (type == TetriminoType.I)
-            return GetIPieceCells(normalizedRotation);
+            return GetIPieceCells(rotation);
 
         Vector2Int[] source = SpawnCells[type];
         Vector2Int[] result = new Vector2Int[source.Length];
 
-        int turns = type == TetriminoType.O ? 0 : normalizedRotation;
+        int turns = type == TetriminoType.O ? 0 : rotation;
         for (int i = 0; i < source.Length; i++)
         {
             Vector2Int cell = source[i];

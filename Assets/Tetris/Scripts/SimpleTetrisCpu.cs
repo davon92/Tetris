@@ -61,10 +61,10 @@ public sealed class SimpleTetrisCpu
         return difficulty switch
         {
             CpuDifficulty.Easy => new CpuDifficultySettings(
-                actionInterval: 0.28f,
-                thinkDelay: 0.95f,
-                dropDelay: 0.5f,
-                placementChoices: 8),
+                actionInterval: 0.22f,
+                thinkDelay: 0.75f,
+                dropDelay: 0.4f,
+                placementChoices: 6),
             CpuDifficulty.Normal => new CpuDifficultySettings(
                 actionInterval: 0.16f,
                 thinkDelay: 0.5f,

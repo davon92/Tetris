@@ -25,9 +25,16 @@ public sealed class TetrisGameSession : MonoBehaviour
     private readonly Dictionary<TetriminoType, TetriminoPiece> piecePrefabLookup = new();
     private readonly Dictionary<TetriminoType, CellStyle> cellStyleLookup = new();
 
+    private const int ManaPieceInterval = 6;
+    private const int ManaSpawnPercent = 45;
+
+    private static readonly Color ManaColor = new Color(1f, 0.84f, 0.25f);
+
     private SevenBagRandomizer randomizer;
     private SharedPieceQueue sharedPieceQueue;
     private System.Random garbageRandom;
+    private System.Random manaRandom;
+    private int piecesSinceMana;
     private Grid battleGrid;
     private Transform lockedRoot;
     private Transform activeRoot;
@@ -48,6 +55,13 @@ public sealed class TetrisGameSession : MonoBehaviour
     public event Action<TetrisGameSession, Vector2Int[]> PieceLocked;
     public event Action<TetrisGameSession, int[]> LinesCleared;
     public event Action<TetrisGameSession, int> GarbageApplied;
+    public event Action<TetrisGameSession, int> GarbageCancelled;
+
+    /// <summary>This player earned their spell — the match routes it at a target.</summary>
+    public event Action<TetrisGameSession, MagicAbility> AbilityCast;
+
+    /// <summary>A spell resolved on this board. Carries the cells it destroyed.</summary>
+    public event Action<TetrisGameSession, MagicAbility, Vector2Int[]> AbilityResolved;
 
     public string DisplayName { get; private set; }
     public TetrisBoardModel Model { get; private set; }
@@ -63,6 +77,35 @@ public sealed class TetrisGameSession : MonoBehaviour
     public TetriminoType NextType => sharedPieceQueue?.NextType ?? nextType;
     public bool IsRunning => running;
     public bool IsGameOver => initialized && !running;
+
+    /// <summary>True while hold has been spent for the current drop.</summary>
+    public bool IsHoldLocked => holdUsed;
+
+    /// <summary>The spell this player casts, from their chosen character.</summary>
+    public MagicAbility Ability { get; set; } = MagicAbility.Lightning;
+
+    /// <summary>Index into the active piece's cells that is a mana cell, or -1.</summary>
+    public int ActiveManaCell { get; private set; } = -1;
+
+    /// <summary>Upcoming pieces, nearest first. Reads the shared queue in versus.</summary>
+    public TetriminoType[] PeekUpcoming(int count)
+    {
+        if (sharedPieceQueue != null)
+            return sharedPieceQueue.PeekUpcoming(count);
+
+        if (count <= 0)
+            return Array.Empty<TetriminoType>();
+
+        TetriminoType[] upcoming = new TetriminoType[count];
+        upcoming[0] = nextType;
+        if (count > 1)
+        {
+            TetriminoType[] fromBag = randomizer.Peek(count - 1);
+            Array.Copy(fromBag, 0, upcoming, 1, count - 1);
+        }
+
+        return upcoming;
+    }
 
     public Vector3 GetCellWorldPosition(Vector2Int cell)
     {
@@ -91,6 +134,8 @@ public sealed class TetrisGameSession : MonoBehaviour
         Model = new TetrisBoardModel();
         randomizer = new SevenBagRandomizer(seed);
         garbageRandom = new System.Random(seed ^ 0x5f3759df);
+        manaRandom = new System.Random(seed ^ 0x2545f491);
+        piecesSinceMana = 0;
         nextType = sharedPieceQueue?.NextType ?? randomizer.Next();
 
         CachePiecePrefabs(piecePrefabs);
@@ -149,6 +194,54 @@ public sealed class TetrisGameSession : MonoBehaviour
             PendingGarbage = Mathf.Clamp(PendingGarbage + lineCount, 0, 20);
     }
 
+    /// <summary>
+    /// Resolves a spell against this board immediately. Offensive spells carve
+    /// the stack without settling it, so the wells and overhangs they leave are
+    /// the actual damage; Heal mends the caster's own garbage instead.
+    /// </summary>
+    public void ReceiveAbility(MagicAbility ability)
+    {
+        if (!running)
+            return;
+
+        List<Vector2Int> affected;
+        switch (ability)
+        {
+            case MagicAbility.Lightning:
+            {
+                int start = Mathf.Clamp(Model.FindTallestColumn() - 1, 0, Model.Width - 2);
+                affected = Model.CarveColumns(start, 2);
+                break;
+            }
+
+            case MagicAbility.Starburst:
+            {
+                // Clamped so the full 4-wide crater lands on the board, and
+                // sunk a row below the surface so the stack above it survives
+                // as an overhang — the sealed holes are the real damage.
+                int centerX = Mathf.Clamp(Model.FindTallestColumn(), 2, Model.Width - 2);
+                int centerY = Mathf.Max(1, Model.GetColumnHeight(centerX) - 4);
+                affected = Model.CarveCrater(centerX, centerY);
+                break;
+            }
+
+            default:
+            {
+                int cancelled = Mathf.Min(PendingGarbage, 4);
+                PendingGarbage -= cancelled;
+                if (cancelled > 0)
+                    GarbageCancelled?.Invoke(this, cancelled);
+
+                Model.MendGarbageRows(2);
+                affected = new List<Vector2Int>();
+                break;
+            }
+        }
+
+        RefreshLockedView();
+        AbilityResolved?.Invoke(this, ability, affected.ToArray());
+    }
+
     public void Stop()
     {
         running = false;
@@ -164,6 +257,10 @@ public sealed class TetrisGameSession : MonoBehaviour
         if (resetLockDelay)
             lockTimer = 0f;
 
+        // Only player-driven sideways nudges click; gravity steps stay silent.
+        if (resetLockDelay && direction.y == 0)
+            GameAudio.Play(GameSfx.PieceMove);
+
         RefreshActiveView();
         return true;
     }
@@ -178,6 +275,11 @@ public sealed class TetrisGameSession : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Sonic-drop semantics: the piece slams to the stack but keeps the normal
+    /// lock delay, so there is still a beat to slide or rotate it — and a
+    /// second press while already grounded commits it instantly.
+    /// </summary>
     private bool HardDrop()
     {
         int distance = 0;
@@ -187,9 +289,18 @@ public sealed class TetrisGameSession : MonoBehaviour
             distance++;
         }
 
+        if (distance == 0)
+        {
+            RefreshActiveView();
+            LockActivePiece();
+            return true;
+        }
+
         Score += distance * 2;
+        fallTimer = 0f;
+        lockTimer = 0f;
+        GameAudio.Play(GameSfx.HardDrop);
         RefreshActiveView();
-        LockActivePiece();
         return true;
     }
 
@@ -208,6 +319,7 @@ public sealed class TetrisGameSession : MonoBehaviour
             ActiveRotation = nextRotation;
             ActivePosition = nextPosition;
             lockTimer = 0f;
+            GameAudio.Play(GameSfx.PieceRotate);
             RefreshActiveView();
             return true;
         }
@@ -234,6 +346,7 @@ public sealed class TetrisGameSession : MonoBehaviour
         }
 
         holdUsed = true;
+        GameAudio.Play(GameSfx.Hold);
         return running;
     }
 
@@ -243,8 +356,17 @@ public sealed class TetrisGameSession : MonoBehaviour
             return;
 
         Vector2Int[] lockedCells = GetActiveBoardCells();
-        int cleared = Model.Place(ActiveType, ActivePosition, ActiveRotation);
+        int cleared = Model.Place(ActiveType, ActivePosition, ActiveRotation, ActiveManaCell);
+        bool manaCleared = Model.LastClearContainedMana;
+        ActiveManaCell = -1;
         PieceLocked?.Invoke(this, lockedCells);
+        // Duck the lock thud when a clear is about to sing over it.
+        GameAudio.Play(GameSfx.PieceLock, cleared > 0 ? 0.45f : 1f);
+
+        if (cleared >= 4)
+            GameAudio.Play(GameSfx.Tetris);
+        else if (cleared > 0)
+            GameAudio.Play(GameSfx.LineClear);
 
         if (cleared > 0)
         {
@@ -262,8 +384,19 @@ public sealed class TetrisGameSession : MonoBehaviour
         attack -= cancelled;
         PendingGarbage -= cancelled;
 
+        if (cancelled > 0)
+        {
+            GarbageCancelled?.Invoke(this, cancelled);
+            GameAudio.Play(GameSfx.GarbageBlocked);
+        }
+
         if (attack > 0)
             AttackGenerated?.Invoke(this, attack);
+
+        // A tetris or a cleared mana cell earns the spell. Tetrises being a
+        // trigger is the whole point: it pays to build for four.
+        if (cleared >= 4 || manaCleared)
+            AbilityCast?.Invoke(this, Ability);
 
         bool garbageOverflow = false;
         if (PendingGarbage > 0)
@@ -275,6 +408,7 @@ public sealed class TetrisGameSession : MonoBehaviour
                 garbageToApply,
                 line => line % 3 == 0 ? garbageRandom.Next(Model.Width) : sharedHole);
             GarbageApplied?.Invoke(this, garbageToApply);
+            GameAudio.Play(GameSfx.GarbageLand);
         }
 
         RefreshLockedView();
@@ -294,7 +428,10 @@ public sealed class TetrisGameSession : MonoBehaviour
         {
             combo++;
             Lines += cleared;
+            int previousLevel = Level;
             Level = 1 + Lines / 10;
+            if (Level > previousLevel)
+                GameAudio.Play(GameSfx.LevelUp);
         }
         else
         {
@@ -355,6 +492,15 @@ public sealed class TetrisGameSession : MonoBehaviour
         fallTimer = 0f;
         lockTimer = 0f;
         PieceSerial++;
+
+        // One cell of some pieces is a gold mana cell: clearing the row it
+        // ends up in casts this player's spell, so it is worth steering.
+        ActiveManaCell = piecesSinceMana >= ManaPieceInterval &&
+                         manaRandom.Next(100) < ManaSpawnPercent
+            ? manaRandom.Next(TetrominoDefinitions.GetCells(type, 0).Length)
+            : -1;
+
+        piecesSinceMana = ActiveManaCell >= 0 ? 0 : piecesSinceMana + 1;
 
         if (resetHold)
             holdUsed = false;
@@ -457,6 +603,7 @@ public sealed class TetrisGameSession : MonoBehaviour
 
         activePieceView.SetState(ActivePosition, ActiveRotation);
         SetBlockVisibility(activePieceView, pieceCells, ActivePosition, true);
+        ApplyManaTint(activePieceView, 1f);
 
         Vector2Int ghostPosition = new Vector2Int(ActivePosition.x, ghostY);
         ghostPieceView.SetState(ghostPosition, ActiveRotation);
@@ -465,6 +612,7 @@ public sealed class TetrisGameSession : MonoBehaviour
             pieceCells,
             ghostPosition,
             ghostY != int.MinValue);
+        ApplyManaTint(ghostPieceView, 0.22f);
     }
 
     private void EnsurePieceViews()
@@ -534,9 +682,12 @@ public sealed class TetrisGameSession : MonoBehaviour
         if (style.Material != null)
             renderer.sharedMaterial = style.Material;
         renderer.sortingOrder = 0;
-        renderer.color = cellValue == 8
-            ? new Color(0.48f, 0.52f, 0.6f)
-            : style.Color;
+        renderer.color = cellValue switch
+        {
+            TetrisBoardModel.GarbageCell => new Color(0.48f, 0.52f, 0.6f),
+            TetrisBoardModel.ManaCell => ManaColor,
+            _ => style.Color
+        };
         return renderer;
     }
 
@@ -595,6 +746,32 @@ public sealed class TetrisGameSession : MonoBehaviour
         int count = Mathf.Min(renderers.Length, cells.Length);
         for (int i = 0; i < count; i++)
             renderers[i].enabled = visible && position.y + cells[i].y < Model.VisibleHeight;
+    }
+
+    /// <summary>
+    /// Repaints the mana cell gold so the player can see which block is worth
+    /// steering into a line. Runs every frame the piece view refreshes because
+    /// the piece prefab is recreated whenever the type changes.
+    /// </summary>
+    private void ApplyManaTint(TetriminoPiece piece, float alpha)
+    {
+        if (piece == null)
+            return;
+
+        SpriteRenderer[] renderers = piece.GetVisualRenderers();
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] == null)
+                continue;
+
+            Color color = i == ActiveManaCell
+                ? ManaColor
+                : cellStyleLookup.TryGetValue(ActiveType, out CellStyle style)
+                    ? style.Color
+                    : renderers[i].color;
+
+            renderers[i].color = new Color(color.r, color.g, color.b, alpha);
+        }
     }
 
     private static void SetPieceVisible(TetriminoPiece piece, bool visible)

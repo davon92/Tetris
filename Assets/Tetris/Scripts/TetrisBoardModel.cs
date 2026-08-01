@@ -58,17 +58,36 @@ public sealed class TetrisBoardModel
         return true;
     }
 
+    /// <summary>Cell value used for garbage rows.</summary>
+    public const int GarbageCell = 8;
+
+    /// <summary>Cell value for a gold mana cell — clearing its row casts the owner's ability.</summary>
+    public const int ManaCell = 9;
+
+    /// <summary>True when the most recent clear removed at least one mana cell.</summary>
+    public bool LastClearContainedMana { get; private set; }
+
     public int Place(TetriminoType type, Vector2Int position, int rotation)
+    {
+        return Place(type, position, rotation, -1);
+    }
+
+    /// <summary>
+    /// Places a piece; <paramref name="manaCellIndex"/> marks that index of the
+    /// piece's cells as a gold mana cell instead of its normal color.
+    /// </summary>
+    public int Place(TetriminoType type, Vector2Int position, int rotation, int manaCellIndex)
     {
         if (!IsValid(type, position, rotation))
             throw new InvalidOperationException("Cannot place a tetromino in an invalid position.");
 
         int cellValue = (int)type + 1;
-        foreach (Vector2Int cell in TetrominoDefinitions.GetCells(type, rotation))
+        Vector2Int[] pieceCells = TetrominoDefinitions.GetCells(type, rotation);
+        for (int i = 0; i < pieceCells.Length; i++)
         {
-            int x = position.x + cell.x;
-            int y = position.y + cell.y;
-            cells[x, y] = cellValue;
+            int x = position.x + pieceCells[i].x;
+            int y = position.y + pieceCells[i].y;
+            cells[x, y] = i == manaCellIndex ? ManaCell : cellValue;
         }
 
         return ClearFullLines();
@@ -134,9 +153,182 @@ public sealed class TetrisBoardModel
         return new TetrisBoardModel(this);
     }
 
+    /// <summary>
+    /// Lightning: empties whole columns top to bottom. Nothing falls, so the
+    /// result is a clean vertical well only an I-piece fills comfortably.
+    /// Returns the cells that were destroyed, for the effects layer.
+    /// </summary>
+    public List<Vector2Int> CarveColumns(int startX, int columnCount)
+    {
+        List<Vector2Int> destroyed = new();
+        for (int x = startX; x < startX + columnCount; x++)
+        {
+            if (x < 0 || x >= Width)
+                continue;
+
+            for (int y = 0; y < Height; y++)
+            {
+                if (cells[x, y] == 0)
+                    continue;
+
+                destroyed.Add(new Vector2Int(x, y));
+                cells[x, y] = 0;
+            }
+        }
+
+        return destroyed;
+    }
+
+    /// <summary>
+    /// Starburst: blows a 2-4-4-2 crater out of the stack, centered on the
+    /// tallest column. Cells above the crater are deliberately left floating —
+    /// the overhangs are the damage, since they seal holes that need S/Z/J/L
+    /// tucks rather than a clean refill.
+    /// </summary>
+    public List<Vector2Int> CarveCrater(int centerX, int centerY)
+    {
+        int[] rowWidths = { 2, 4, 4, 2 };
+        List<Vector2Int> destroyed = new();
+
+        for (int row = 0; row < rowWidths.Length; row++)
+        {
+            int y = centerY + rowWidths.Length / 2 - row;
+            if (y < 0 || y >= Height)
+                continue;
+
+            int width = rowWidths[row];
+            int startX = centerX - width / 2;
+            for (int x = startX; x < startX + width; x++)
+            {
+                if (x < 0 || x >= Width || cells[x, y] == 0)
+                    continue;
+
+                destroyed.Add(new Vector2Int(x, y));
+                cells[x, y] = 0;
+            }
+        }
+
+        return destroyed;
+    }
+
+    /// <summary>Highest occupied row plus one — how full the board is.</summary>
+    public int GetStackHeight()
+    {
+        for (int y = Height - 1; y >= 0; y--)
+        {
+            for (int x = 0; x < Width; x++)
+            {
+                if (cells[x, y] != 0)
+                    return y + 1;
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Rows that are purely garbage. This is the damage the player can win
+    /// back by clearing, so the HUD shows it as recoverable grey health.
+    /// </summary>
+    public int CountGarbageRows()
+    {
+        int count = 0;
+        for (int y = 0; y < Height; y++)
+        {
+            if (IsGarbageRow(y))
+                count++;
+        }
+
+        return count;
+    }
+
+    /// <summary>Column height measured from the floor, used to aim a crater.</summary>
+    public int GetColumnHeight(int x)
+    {
+        for (int y = Height - 1; y >= 0; y--)
+        {
+            if (cells[x, y] != 0)
+                return y + 1;
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// The tallest column, so an attack lands where it hurts. Ties break
+    /// toward the middle — otherwise a flat board always aims at column 0 and
+    /// half of a wide attack falls off the edge.
+    /// </summary>
+    public int FindTallestColumn()
+    {
+        int center = Width / 2;
+        int bestX = center;
+        int bestHeight = -1;
+        for (int x = 0; x < Width; x++)
+        {
+            int height = GetColumnHeight(x);
+            if (height < bestHeight)
+                continue;
+
+            if (height == bestHeight &&
+                Mathf.Abs(x - center) >= Mathf.Abs(bestX - center))
+            {
+                continue;
+            }
+
+            bestHeight = height;
+            bestX = x;
+        }
+
+        return bestX;
+    }
+
+    /// <summary>
+    /// Heal: dissolves whole garbage rows from the bottom up and everything
+    /// above settles down. Returns how many rows were removed.
+    /// </summary>
+    public int MendGarbageRows(int maxRows)
+    {
+        int removed = 0;
+        for (int y = 0; y < Height && removed < maxRows; y++)
+        {
+            if (!IsGarbageRow(y))
+                continue;
+
+            for (int shiftY = y; shiftY < Height - 1; shiftY++)
+            {
+                for (int x = 0; x < Width; x++)
+                    cells[x, shiftY] = cells[x, shiftY + 1];
+            }
+
+            for (int x = 0; x < Width; x++)
+                cells[x, Height - 1] = 0;
+
+            removed++;
+            y--;
+        }
+
+        return removed;
+    }
+
+    private bool IsGarbageRow(int y)
+    {
+        bool sawGarbage = false;
+        for (int x = 0; x < Width; x++)
+        {
+            if (cells[x, y] == GarbageCell)
+                sawGarbage = true;
+            else if (cells[x, y] != 0)
+                return false;
+        }
+
+        return sawGarbage;
+    }
+
     private int ClearFullLines()
     {
         lastClearedRows.Clear();
+        LastClearContainedMana = false;
         int writeRow = 0;
         int cleared = 0;
 
@@ -156,6 +348,12 @@ public sealed class TetrisBoardModel
             {
                 cleared++;
                 lastClearedRows.Add(readRow);
+                for (int x = 0; x < Width; x++)
+                {
+                    if (cells[x, readRow] == ManaCell)
+                        LastClearContainedMana = true;
+                }
+
                 continue;
             }
 

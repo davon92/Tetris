@@ -16,7 +16,8 @@ public readonly struct BattleCharacterDefinition
         string title,
         BattleCharacterPortrait portrait,
         Color accent,
-        bool unlockedByDefault)
+        bool unlockedByDefault,
+        MagicAbility ability)
     {
         Id = id;
         DisplayName = displayName;
@@ -24,6 +25,7 @@ public readonly struct BattleCharacterDefinition
         Portrait = portrait;
         Accent = accent;
         UnlockedByDefault = unlockedByDefault;
+        Ability = ability;
     }
 
     public string Id { get; }
@@ -32,6 +34,7 @@ public readonly struct BattleCharacterDefinition
     public BattleCharacterPortrait Portrait { get; }
     public Color Accent { get; }
     public bool UnlockedByDefault { get; }
+    public MagicAbility Ability { get; }
 }
 
 public static class BattleCharacterRoster
@@ -46,18 +49,20 @@ public static class BattleCharacterRoster
             "STAR-MAGE COURIER",
             BattleCharacterPortrait.Lyra,
             new Color(0.95f, 0.48f, 0.86f),
-            true),
+            true,
+            MagicAbility.Starburst),
         new(
             "bram",
             "BRAM",
             "STORM-MAGE RIVAL",
             BattleCharacterPortrait.Bram,
             new Color(0.3f, 0.85f, 1f),
-            true),
-        CreateLocked("hidden-01"),
-        CreateLocked("hidden-02"),
-        CreateLocked("hidden-03"),
-        CreateLocked("hidden-04")
+            true,
+            MagicAbility.Lightning),
+        CreateLocked("hidden-01", MagicAbility.Heal),
+        CreateLocked("hidden-02", MagicAbility.Lightning),
+        CreateLocked("hidden-03", MagicAbility.Starburst),
+        CreateLocked("hidden-04", MagicAbility.Heal)
     };
 
     public static int Count => Characters.Length;
@@ -103,7 +108,7 @@ public static class BattleCharacterRoster
         return true;
     }
 
-    private static BattleCharacterDefinition CreateLocked(string id)
+    private static BattleCharacterDefinition CreateLocked(string id, MagicAbility ability)
     {
         return new BattleCharacterDefinition(
             id,
@@ -111,6 +116,7 @@ public static class BattleCharacterRoster
             "WIN ADVENTURES TO UNLOCK",
             BattleCharacterPortrait.Locked,
             new Color(0.56f, 0.48f, 0.78f),
-            false);
+            false,
+            ability);
     }
 }

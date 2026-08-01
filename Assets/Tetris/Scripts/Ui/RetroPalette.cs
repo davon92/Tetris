@@ -30,6 +30,7 @@ public static class RetroPalette
     public static readonly Color GoldFrame = new Color(0.95f, 0.72f, 0.24f);
     public static readonly Color GoldText = new Color(1f, 0.84f, 0.38f);
     public static readonly Color Rose = new Color(0.92f, 0.3f, 0.56f);
+    public static readonly Color Success = new Color(0.35f, 0.92f, 0.55f);
 
     public static readonly Color ReadyAccent = new Color(0.3f, 0.88f, 1f);
     public static readonly Color StartAccent = new Color(1f, 0.78f, 0.26f);
@@ -51,4 +52,9 @@ public static class RetroPalette
     public static readonly Color NameplateLyra = new Color(0.25f, 0.055f, 0.28f, 0.98f);
     public static readonly Color NameplateBram = new Color(0.025f, 0.18f, 0.25f, 0.98f);
     public static readonly Color NameplateNeutral = new Color(0.08f, 0.09f, 0.16f, 0.98f);
+
+    public static readonly Color ScorePlateFill = new Color(0.05f, 0.032f, 0.11f, 0.96f);
+    public static readonly Color ChipFill = new Color(0.03f, 0.05f, 0.13f, 0.92f);
+    public static readonly Color DangerFlash = new Color(1f, 0.32f, 0.38f, 0.9f);
+    public static readonly Color EmberOrange = new Color(1f, 0.47f, 0.16f, 1f);
 }

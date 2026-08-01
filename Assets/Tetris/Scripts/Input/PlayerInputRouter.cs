@@ -49,14 +49,22 @@ public sealed class PlayerInputRouter
             ? Gamepad.all[bindings.GamepadIndex]
             : null;
 
-        bool leftPressed = WasPressed(keyboard, bindings.Left) || WasPressed(gamepad?.dpad.left);
-        bool rightPressed = WasPressed(keyboard, bindings.Right) || WasPressed(gamepad?.dpad.right);
-        bool leftHeld = IsHeld(keyboard, bindings.Left) || IsHeld(gamepad?.dpad.left);
-        bool rightHeld = IsHeld(keyboard, bindings.Right) || IsHeld(gamepad?.dpad.right);
+        // The left stick's synthetic direction buttons count the same as the
+        // d-pad — plenty of players never touch the d-pad at all.
+        bool leftPressed = WasPressed(keyboard, bindings.Left) ||
+            WasPressed(gamepad?.dpad.left) || WasPressed(gamepad?.leftStick.left);
+        bool rightPressed = WasPressed(keyboard, bindings.Right) ||
+            WasPressed(gamepad?.dpad.right) || WasPressed(gamepad?.leftStick.right);
+        bool leftHeld = IsHeld(keyboard, bindings.Left) ||
+            IsHeld(gamepad?.dpad.left) || IsHeld(gamepad?.leftStick.left);
+        bool rightHeld = IsHeld(keyboard, bindings.Right) ||
+            IsHeld(gamepad?.dpad.right) || IsHeld(gamepad?.leftStick.right);
         UpdateHorizontal(session, leftPressed, rightPressed, leftHeld, rightHeld, deltaTime);
 
-        bool dropPressed = WasPressed(keyboard, bindings.SoftDrop) || WasPressed(gamepad?.dpad.down);
-        bool dropHeld = IsHeld(keyboard, bindings.SoftDrop) || IsHeld(gamepad?.dpad.down);
+        bool dropPressed = WasPressed(keyboard, bindings.SoftDrop) ||
+            WasPressed(gamepad?.dpad.down) || WasPressed(gamepad?.leftStick.down);
+        bool dropHeld = IsHeld(keyboard, bindings.SoftDrop) ||
+            IsHeld(gamepad?.dpad.down) || IsHeld(gamepad?.leftStick.down);
         UpdateSoftDrop(session, dropPressed, dropHeld, deltaTime);
 
         if (WasPressed(keyboard, bindings.RotateClockwise) || WasPressed(gamepad?.buttonSouth))

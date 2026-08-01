@@ -105,6 +105,38 @@ public static class RetroGui
         }
     }
 
+    /// <summary>
+    /// Draws a tetromino centered inside <paramref name="bounds"/>.
+    /// <see cref="Tetromino"/> anchors the origin cell's center, which leaves
+    /// I and O pieces visibly off-center in small frames; this computes the
+    /// piece's pixel bounding box (including the 2px drop shadow) and offsets
+    /// the draw center so the whole piece sits centered in the box.
+    /// </summary>
+    public static void TetrominoInBox(
+        TetriminoType type,
+        Rect bounds,
+        float cellSize,
+        int rotation,
+        float alpha)
+    {
+        Vector2Int[] cells = TetrominoDefinitions.GetCells(type, rotation);
+        int minX = int.MaxValue, maxX = int.MinValue;
+        int minY = int.MaxValue, maxY = int.MinValue;
+        foreach (Vector2Int cell in cells)
+        {
+            minX = Mathf.Min(minX, cell.x);
+            maxX = Mathf.Max(maxX, cell.x);
+            minY = Mathf.Min(minY, cell.y);
+            maxY = Mathf.Max(maxY, cell.y);
+        }
+
+        // The +0.5f/-0.5f terms account for the shadow (+2px right/bottom)
+        // and the cellSize-1 cell rects; both shift the visual center by ~1px.
+        float centerX = bounds.center.x - (minX + maxX) * 0.5f * cellSize - 0.5f;
+        float centerY = bounds.center.y + (minY + maxY) * 0.5f * cellSize - 0.5f;
+        Tetromino(type, new Vector2(centerX, centerY), cellSize, rotation, alpha);
+    }
+
     public static Texture2D CreateSolidTexture(Color color)
     {
         Texture2D texture = new Texture2D(1, 1)

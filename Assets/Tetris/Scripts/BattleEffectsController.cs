@@ -5,6 +5,9 @@ using UnityEngine;
 public sealed class BattleEffectsController : MonoBehaviour
 {
     private const float PixelsPerUnit = 16f;
+    private const int MaxGarbageIndicators = 20;
+    private const float GarbageIndicatorRowGap = 1f;
+    private const float GarbageIndicatorClearance = 0.9f;
 
     private sealed class SpriteEffect
     {
@@ -41,6 +44,8 @@ public sealed class BattleEffectsController : MonoBehaviour
     private TetrisGameSession playerTwo;
     private Sprite effectSprite;
     private Material effectMaterial;
+    private SpriteRenderer[] playerOneGarbageDots;
+    private SpriteRenderer[] playerTwoGarbageDots;
 
     public void Initialize(
         TetrisGameSession first,
@@ -53,6 +58,8 @@ public sealed class BattleEffectsController : MonoBehaviour
         CacheEffectStyle(piecePrefabs);
         Subscribe(playerOne);
         Subscribe(playerTwo);
+        playerOneGarbageDots = CreateGarbageDots(playerOne);
+        playerTwoGarbageDots = CreateGarbageDots(playerTwo);
     }
 
     public void ClearBattle()
@@ -69,6 +76,8 @@ public sealed class BattleEffectsController : MonoBehaviour
 
         spriteEffects.Clear();
         shakeEffects.Clear();
+        DestroyGarbageDots(ref playerOneGarbageDots);
+        DestroyGarbageDots(ref playerTwoGarbageDots);
         playerOne = null;
         playerTwo = null;
     }
@@ -82,6 +91,8 @@ public sealed class BattleEffectsController : MonoBehaviour
     {
         UpdateSpriteEffects(Time.deltaTime);
         UpdateShakeEffects(Time.deltaTime);
+        UpdateGarbageIndicators(playerOne, playerOneGarbageDots);
+        UpdateGarbageIndicators(playerTwo, playerTwoGarbageDots);
     }
 
     private void Subscribe(TetrisGameSession session)
@@ -93,6 +104,8 @@ public sealed class BattleEffectsController : MonoBehaviour
         session.LinesCleared += OnLinesCleared;
         session.AttackGenerated += OnAttackGenerated;
         session.GarbageApplied += OnGarbageApplied;
+        session.GarbageCancelled += OnGarbageCancelled;
+        session.AbilityResolved += OnAbilityResolved;
     }
 
     private void Unsubscribe(TetrisGameSession session)
@@ -104,6 +117,8 @@ public sealed class BattleEffectsController : MonoBehaviour
         session.LinesCleared -= OnLinesCleared;
         session.AttackGenerated -= OnAttackGenerated;
         session.GarbageApplied -= OnGarbageApplied;
+        session.GarbageCancelled -= OnGarbageCancelled;
+        session.AbilityResolved -= OnAbilityResolved;
     }
 
     private void CacheEffectStyle(TetriminoPiece[] piecePrefabs)
@@ -202,13 +217,18 @@ public sealed class BattleEffectsController : MonoBehaviour
         if (target == null)
             return;
 
-        Vector3 start = source.GetBoardWorldPosition(source.Model.Width * 0.5f, 12f);
-        Vector3 end = target.GetBoardWorldPosition(target.Model.Width * 0.5f, 12f);
+        float sourceY = source.Model.VisibleHeight + GarbageIndicatorClearance;
+        float targetY = target.Model.VisibleHeight + GarbageIndicatorClearance;
+        Vector3 start = source.GetBoardWorldPosition(source.Model.Width * 0.5f, sourceY);
+        Vector3 end = target.GetBoardWorldPosition(target.Model.Width * 0.5f, targetY);
         Color attackColor = lines >= 4
             ? new Color(1f, 0.28f, 0.85f, 1f)
             : new Color(0.25f, 0.9f, 1f, 1f);
         float scale = 0.65f + Mathf.Min(lines, 4) * 0.14f;
 
+        // Arc peak must clear the boards but stay below the title banner:
+        // IMGUI draws over world sprites, so anything above ~world y 12.4
+        // vanishes behind the opaque banner mid-flight.
         CreateSpriteEffect(
             "Magic Attack",
             start,
@@ -218,7 +238,7 @@ public sealed class BattleEffectsController : MonoBehaviour
             attackColor,
             new Color(1f, 0.9f, 0.3f, 0.15f),
             0.52f,
-            arcHeight: 2.4f,
+            arcHeight: 1.3f,
             rotationSpeed: 540f,
             onComplete: () => SpawnAttackImpact(target, end, attackColor, lines));
 
@@ -234,7 +254,7 @@ public sealed class BattleEffectsController : MonoBehaviour
                 new Color(attackColor.r, attackColor.g, attackColor.b, 0.7f),
                 new Color(attackColor.r, attackColor.g, attackColor.b, 0f),
                 0.48f,
-                arcHeight: 2f + Mathf.Abs(offset),
+                arcHeight: 1.1f + Mathf.Abs(offset) * 0.5f,
                 delay: i * 0.035f,
                 rotationSpeed: i % 2 == 0 ? 420f : -420f);
         }
@@ -263,6 +283,87 @@ public sealed class BattleEffectsController : MonoBehaviour
                 arcHeight: 0.5f,
                 delay: i * 0.015f,
                 rotationSpeed: RandomRange(-280f, 280f));
+        }
+    }
+
+    /// <summary>A spell landed on this board: flash every cell it destroyed.</summary>
+    private void OnAbilityResolved(
+        TetrisGameSession session,
+        MagicAbility ability,
+        Vector2Int[] destroyed)
+    {
+        Color spellColor = ability switch
+        {
+            MagicAbility.Lightning => new Color(0.55f, 0.85f, 1f, 1f),
+            MagicAbility.Starburst => new Color(1f, 0.55f, 0.2f, 1f),
+            _ => new Color(0.45f, 1f, 0.65f, 1f)
+        };
+
+        StartShake(session, 0.4f, ability == MagicAbility.Heal ? 2 : 5);
+
+        if (ability == MagicAbility.Heal)
+        {
+            Vector3 healCenter = session.GetBoardWorldPosition(session.Model.Width * 0.5f, 4f);
+            for (int i = 0; i < 14; i++)
+            {
+                Vector3 start = healCenter + new Vector3(RandomRange(-4.5f, 4.5f), RandomRange(-3f, 0f), 0f);
+                CreateSpriteEffect(
+                    "Heal Mote",
+                    start,
+                    start + new Vector3(RandomRange(-0.4f, 0.4f), RandomRange(2.5f, 4.5f), 0f),
+                    Vector3.one * 0.34f,
+                    Vector3.one * 0.06f,
+                    spellColor,
+                    new Color(spellColor.r, spellColor.g, spellColor.b, 0f),
+                    0.6f,
+                    delay: i * 0.02f,
+                    rotationSpeed: RandomRange(-200f, 200f));
+            }
+
+            return;
+        }
+
+        foreach (Vector2Int cell in destroyed)
+        {
+            Vector3 position = session.GetCellWorldPosition(cell);
+            CreateSpriteEffect(
+                "Spell Burst",
+                position,
+                position + new Vector3(RandomRange(-0.7f, 0.7f), RandomRange(0.4f, 1.6f), 0f),
+                Vector3.one * 0.55f,
+                Vector3.one * 0.05f,
+                spellColor,
+                new Color(1f, 0.95f, 0.6f, 0f),
+                0.45f,
+                arcHeight: 0.3f,
+                delay: RandomRange(0f, 0.12f),
+                rotationSpeed: RandomRange(-400f, 400f));
+        }
+    }
+
+    /// <summary>The player cleared enough to cancel some or all of their incoming garbage.</summary>
+    private void OnGarbageCancelled(TetrisGameSession session, int cancelledLines)
+    {
+        Color shieldColor = new Color(0.4f, 1f, 0.68f, 1f);
+        Vector3 center = session.GetBoardWorldPosition(
+            session.Model.Width * 0.5f,
+            session.Model.VisibleHeight + GarbageIndicatorClearance);
+
+        for (int i = 0; i < 10; i++)
+        {
+            float angle = i * Mathf.PI * 2f / 10;
+            Vector3 direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle) * 0.5f, 0f);
+            CreateSpriteEffect(
+                "Garbage Blocked",
+                center,
+                center + direction * RandomRange(0.8f, 1.6f),
+                Vector3.one * 0.36f,
+                Vector3.one * 0.05f,
+                shieldColor,
+                new Color(shieldColor.r, shieldColor.g, shieldColor.b, 0f),
+                0.4f,
+                delay: (i % 3) * 0.02f,
+                rotationSpeed: i % 2 == 0 ? 360f : -360f);
         }
     }
 
@@ -427,6 +528,97 @@ public sealed class BattleEffectsController : MonoBehaviour
         {
             if (shake.Target != null)
                 shake.Target.localPosition = shake.RestPosition;
+        }
+    }
+
+    /// <summary>
+    /// One dot per queued garbage line, laid out in the empty space above the
+    /// board (wrapping to a second row past 10) so the player can see an
+    /// attack coming before it lands on their next lock.
+    /// </summary>
+    private SpriteRenderer[] CreateGarbageDots(TetrisGameSession session)
+    {
+        if (session == null)
+            return null;
+
+        Transform root = new GameObject("Garbage Warning").transform;
+        root.SetParent(session.transform, false);
+
+        int width = Mathf.Max(1, session.Model.Width);
+        SpriteRenderer[] dots = new SpriteRenderer[MaxGarbageIndicators];
+        for (int i = 0; i < MaxGarbageIndicators; i++)
+        {
+            GameObject dotObject = new GameObject($"Garbage Dot {i}");
+            dotObject.transform.SetParent(root, false);
+
+            int row = i / width;
+            int column = i % width;
+            dotObject.transform.localPosition = new Vector3(
+                column + 0.5f,
+                session.Model.VisibleHeight + GarbageIndicatorClearance + row * GarbageIndicatorRowGap,
+                0f);
+            dotObject.transform.localScale = Vector3.one * 0.4f;
+
+            SpriteRenderer renderer = dotObject.AddComponent<SpriteRenderer>();
+            renderer.sprite = effectSprite;
+            if (effectMaterial != null)
+                renderer.sharedMaterial = effectMaterial;
+            renderer.sortingOrder = 60;
+            renderer.enabled = false;
+            dots[i] = renderer;
+        }
+
+        return dots;
+    }
+
+    private static void DestroyGarbageDots(ref SpriteRenderer[] dots)
+    {
+        if (dots == null)
+            return;
+
+        foreach (SpriteRenderer dot in dots)
+        {
+            if (dot != null)
+                Destroy(dot.gameObject);
+        }
+
+        dots = null;
+    }
+
+    private void UpdateGarbageIndicators(TetrisGameSession session, SpriteRenderer[] dots)
+    {
+        if (session == null || dots == null)
+            return;
+
+        int pending = session.PendingGarbage;
+        if (pending == 0)
+        {
+            foreach (SpriteRenderer dot in dots)
+            {
+                if (dot != null)
+                    dot.enabled = false;
+            }
+
+            return;
+        }
+
+        float pulse = 0.55f + Mathf.Sin(Time.time * (5f + pending * 0.4f)) * 0.35f;
+        Color warning = Color.Lerp(
+            new Color(1f, 0.75f, 0.25f, 0.9f),
+            new Color(1f, 0.2f, 0.25f, 0.95f),
+            Mathf.Clamp01((pending - 4) / 12f));
+        warning.a *= pulse;
+
+        for (int i = 0; i < dots.Length; i++)
+        {
+            SpriteRenderer dot = dots[i];
+            if (dot == null)
+                continue;
+
+            bool visible = i < pending;
+            dot.enabled = visible;
+            if (visible)
+                dot.color = warning;
         }
     }
 

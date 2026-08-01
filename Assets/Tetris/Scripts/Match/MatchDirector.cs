@@ -8,12 +8,37 @@ using Object = UnityEngine.Object;
 /// Knows nothing about menus, story flow, input devices, or how any of it is
 /// drawn — it only reports state and raises <see cref="MatchEnded"/>.
 /// </summary>
+/// <summary>What kind of garbage event a <see cref="BattleCallout"/> reports.</summary>
+public enum BattleCalloutKind
+{
+    Sent,
+    Blocked,
+    Incoming,
+    Magic
+}
+
+/// <summary>A short-lived "SENT 4" / "BLOCKED 2" / "+3 INCOMING" toast for one seat.</summary>
+public readonly struct BattleCallout
+{
+    public BattleCallout(string text, BattleCalloutKind kind)
+    {
+        Text = text;
+        Kind = kind;
+    }
+
+    public string Text { get; }
+    public BattleCalloutKind Kind { get; }
+}
+
 public sealed class MatchDirector
 {
     private const int PlayerOneSeed = 101;
     private const int PlayerTwoSeed = 202;
     private const int SharedQueueSeed = 303;
     private const int CpuSeed = 2026;
+
+    /// <summary>How long a garbage callout toast stays on screen.</summary>
+    public const float CalloutLifetime = 1.1f;
 
     private static readonly Vector3Int SoloOrigin = new Vector3Int(-5, -10, 0);
     private static readonly Vector3Int VersusLeftOrigin = new Vector3Int(-12, -10, 0);
@@ -29,6 +54,13 @@ public sealed class MatchDirector
     private TetrisGameSession playerTwo;
     private SimpleTetrisCpu cpu;
     private float phaseTimer;
+
+    private string playerOneCalloutText = string.Empty;
+    private BattleCalloutKind playerOneCalloutKind;
+    private float playerOneCalloutTimer;
+    private string playerTwoCalloutText = string.Empty;
+    private BattleCalloutKind playerTwoCalloutKind;
+    private float playerTwoCalloutTimer;
 
     public MatchDirector(
         Transform sessionParent,
@@ -50,6 +82,23 @@ public sealed class MatchDirector
     public TetrisGameSession PlayerOne => playerOne;
     public TetrisGameSession PlayerTwo => playerTwo;
     public SharedPieceQueue SharedQueue { get; private set; }
+
+    /// <summary>Most recent garbage event for this seat, or null once it has faded.</summary>
+    public BattleCallout? PlayerOneCallout =>
+        playerOneCalloutTimer > 0f ? new BattleCallout(playerOneCalloutText, playerOneCalloutKind) : (BattleCallout?)null;
+
+    public BattleCallout? PlayerTwoCallout =>
+        playerTwoCalloutTimer > 0f ? new BattleCallout(playerTwoCalloutText, playerTwoCalloutKind) : (BattleCallout?)null;
+
+    /// <summary>Seconds since the seat's current callout fired; 0 when none is live.</summary>
+    public float PlayerOneCalloutAge =>
+        playerOneCalloutTimer > 0f ? CalloutLifetime - playerOneCalloutTimer : 0f;
+
+    public float PlayerTwoCalloutAge =>
+        playerTwoCalloutTimer > 0f ? CalloutLifetime - playerTwoCalloutTimer : 0f;
+
+    public float PlayerOneCalloutTimeLeft => Mathf.Max(0f, playerOneCalloutTimer);
+    public float PlayerTwoCalloutTimeLeft => Mathf.Max(0f, playerTwoCalloutTimer);
 
     public MatchPhase Phase { get; private set; } = MatchPhase.Idle;
     public TetrisGameMode Mode { get; private set; }
@@ -99,6 +148,19 @@ public sealed class MatchDirector
             playerOne.AttackGenerated += (_, lines) => playerTwo?.QueueGarbage(lines);
             playerTwo.AttackGenerated += (_, lines) => playerOne?.QueueGarbage(lines);
 
+            playerOne.AttackGenerated += (_, lines) => SetCallout(true, $"SENT {lines}", BattleCalloutKind.Sent);
+            playerOne.GarbageCancelled += (_, cancelled) => SetCallout(true, $"BLOCKED {cancelled}", BattleCalloutKind.Blocked);
+            playerOne.GarbageApplied += (_, lines) => SetCallout(true, $"+{lines} INCOMING", BattleCalloutKind.Incoming);
+
+            playerTwo.AttackGenerated += (_, lines) => SetCallout(false, $"SENT {lines}", BattleCalloutKind.Sent);
+            playerTwo.GarbageCancelled += (_, cancelled) => SetCallout(false, $"BLOCKED {cancelled}", BattleCalloutKind.Blocked);
+            playerTwo.GarbageApplied += (_, lines) => SetCallout(false, $"+{lines} INCOMING", BattleCalloutKind.Incoming);
+
+            playerOne.Ability = BattleCharacterRoster.Get(setup.PlayerOneCharacter).Ability;
+            playerTwo.Ability = BattleCharacterRoster.Get(setup.PlayerTwoCharacter).Ability;
+            playerOne.AbilityCast += OnAbilityCast;
+            playerTwo.AbilityCast += OnAbilityCast;
+
             if (setup.Mode == TetrisGameMode.VersusCpu)
                 cpu = new SimpleTetrisCpu(playerTwo, setup.Difficulty, CpuSeed);
         }
@@ -131,6 +193,40 @@ public sealed class MatchDirector
         PlayerOneWon = false;
         WinnerName = string.Empty;
         LoserName = string.Empty;
+
+        playerOneCalloutTimer = 0f;
+        playerTwoCalloutTimer = 0f;
+    }
+
+    /// <summary>Heal mends the caster; everything else lands on the opponent.</summary>
+    private void OnAbilityCast(TetrisGameSession caster, MagicAbility ability)
+    {
+        bool casterIsPlayerOne = caster == playerOne;
+        TetrisGameSession target = ability == MagicAbility.Heal
+            ? caster
+            : casterIsPlayerOne ? playerTwo : playerOne;
+
+        if (target == null)
+            return;
+
+        target.ReceiveAbility(ability);
+        SetCallout(casterIsPlayerOne, MagicAbilityInfo.DisplayName(ability), BattleCalloutKind.Magic);
+    }
+
+    private void SetCallout(bool forPlayerOne, string text, BattleCalloutKind kind)
+    {
+        if (forPlayerOne)
+        {
+            playerOneCalloutText = text;
+            playerOneCalloutKind = kind;
+            playerOneCalloutTimer = CalloutLifetime;
+        }
+        else
+        {
+            playerTwoCalloutText = text;
+            playerTwoCalloutKind = kind;
+            playerTwoCalloutTimer = CalloutLifetime;
+        }
     }
 
     /// <summary>
@@ -139,6 +235,14 @@ public sealed class MatchDirector
     /// <returns>True when the presentation owns the frame and gameplay must not run.</returns>
     public bool AdvancePhase(float unscaledDeltaTime)
     {
+        // Callout toasts are presentation and must decay in every phase — a
+        // garbage-overflow KO fires INCOMING and ends the match in the same
+        // frame, and Tick stops running the moment the phase leaves Playing.
+        if (playerOneCalloutTimer > 0f)
+            playerOneCalloutTimer -= unscaledDeltaTime;
+        if (playerTwoCalloutTimer > 0f)
+            playerTwoCalloutTimer -= unscaledDeltaTime;
+
         if (Phase == MatchPhase.Playing)
             return false;
 

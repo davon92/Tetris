@@ -166,6 +166,82 @@ public sealed class RetroTheme : IDisposable
             fontStyle = FontStyle.Bold,
             normal = { textColor = new Color(0.76f, 0.87f, 1f) }
         };
+
+        Color chipWhite = new Color(0.96f, 0.97f, 1f);
+
+        ScoreValue = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleRight,
+            fontSize = 20,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = chipWhite }
+        };
+
+        ScoreTag = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleLeft,
+            fontSize = 8,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = RetroPalette.GoldText }
+        };
+
+        ScoreTagCentered = new GUIStyle(ScoreTag)
+        {
+            alignment = TextAnchor.MiddleCenter
+        };
+
+        ChipLabel = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleLeft,
+            fontSize = 8,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = RetroPalette.BorderCyan }
+        };
+
+        ChipValue = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleRight,
+            fontSize = 12,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = chipWhite }
+        };
+
+        BoxHeader = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 9,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = RetroPalette.GoldText }
+        };
+
+        NameRibbon = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleLeft,
+            fontSize = 12,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = Color.white }
+        };
+
+        NameRibbonRight = new GUIStyle(NameRibbon)
+        {
+            alignment = TextAnchor.MiddleRight
+        };
+
+        SeatTag = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 9,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = Color.white }
+        };
+
+        ToastText = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 12,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = Color.white }
+        };
     }
 
     public Texture2D PanelBackground { get; }
@@ -190,6 +266,16 @@ public sealed class RetroTheme : IDisposable
     public GUIStyle StoryPrompt { get; }
     public GUIStyle CharacterName { get; }
     public GUIStyle CharacterTitle { get; }
+    public GUIStyle ScoreValue { get; }
+    public GUIStyle ScoreTag { get; }
+    public GUIStyle ScoreTagCentered { get; }
+    public GUIStyle ChipLabel { get; }
+    public GUIStyle ChipValue { get; }
+    public GUIStyle BoxHeader { get; }
+    public GUIStyle NameRibbon { get; }
+    public GUIStyle NameRibbonRight { get; }
+    public GUIStyle SeatTag { get; }
+    public GUIStyle ToastText { get; }
 
     /// <summary>
     /// Draws a menu button, optionally at a one-off font size. Callers no

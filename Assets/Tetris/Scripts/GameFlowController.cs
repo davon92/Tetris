@@ -50,6 +50,11 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
         if (battleEffects == null)
             battleEffects = gameObject.AddComponent<BattleEffectsController>();
 
+        // Synthesizing the first clip costs a few ms; do it before the first
+        // frame rather than on the first keypress.
+        if (GetComponent<GameAudio>() == null)
+            gameObject.AddComponent<GameAudio>();
+
         MatchSettings settings = new MatchSettings(
             readyDuration,
             startDuration,
@@ -146,6 +151,7 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
         matchDirector.Clear();
         mainMenuModel.ShowRoot();
         router.GoTo(titleMenuScreen);
+        GameAudio.PlayMusic(GameMusic.Menu);
     }
 
     public void ShowCharacterSelect(TetrisGameMode versusMode)
@@ -155,6 +161,7 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
         pendingVersusMode = versusMode;
         characterSelectModel.Begin(versusMode);
         router.GoTo(characterSelectScreen);
+        GameAudio.PlayMusic(GameMusic.Menu);
     }
 
     public void CloseCharacterSelect()
@@ -165,6 +172,7 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
             mainMenuModel.ShowRoot(2);
 
         router.GoTo(titleMenuScreen);
+        GameAudio.PlayMusic(GameMusic.Menu);
     }
 
     public void BeginStory()
@@ -172,6 +180,7 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
         matchDirector.Clear();
         storyDirector.Begin();
         router.GoTo(storyScreen);
+        GameAudio.PlayMusic(GameMusic.Story);
     }
 
     public void RequestStoryBattle()
@@ -215,6 +224,7 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
 
         matchDirector.Begin(setup);
         router.GoTo(battleScreen);
+        GameAudio.PlayMusic(GameMusic.Battle);
     }
 
     private void CancelStoryIfRunning()

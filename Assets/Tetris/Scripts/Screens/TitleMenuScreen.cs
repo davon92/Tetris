@@ -23,22 +23,37 @@ public sealed class TitleMenuScreen : IGameScreen
     public void Tick(float deltaTime, in UiInput input)
     {
         if (input.Cancel && model.Back())
+        {
+            GameAudio.Play(GameSfx.MenuBack);
             return;
+        }
 
         if (input.Up)
+        {
             model.Move(-1);
+            GameAudio.Play(GameSfx.MenuMove);
+        }
         else if (input.Down)
+        {
             model.Move(1);
+            GameAudio.Play(GameSfx.MenuMove);
+        }
 
         if (input.Confirm)
+        {
+            GameAudio.Play(GameSfx.MenuConfirm);
             Activate(model.Activate());
+        }
     }
 
     public void Draw()
     {
         int clicked = MainMenuView.Draw(model, theme);
-        if (clicked != MainMenuView.NoClick)
-            Activate(model.Activate(clicked));
+        if (clicked == MainMenuView.NoClick)
+            return;
+
+        GameAudio.Play(GameSfx.MenuConfirm);
+        Activate(model.Activate(clicked));
     }
 
     private void Activate(MainMenuCommand command)

@@ -35,30 +35,49 @@ public sealed class CharacterSelectScreen : IGameScreen
     {
         if (input.Cancel)
         {
+            GameAudio.Play(GameSfx.MenuBack);
             HandleIntent(model.Back());
             return;
         }
 
         if (input.Left)
+        {
             model.Move(-1);
+            GameAudio.Play(GameSfx.MenuMove);
+        }
         else if (input.Right)
+        {
             model.Move(1);
+            GameAudio.Play(GameSfx.MenuMove);
+        }
 
         if (input.Confirm)
+        {
+            GameAudio.Play(GameSfx.MenuConfirm);
             HandleIntent(model.Confirm());
+        }
     }
 
     public void Draw()
     {
         CharacterSelectClick click = CharacterSelectView.Draw(model, difficulty(), theme, art);
-        if (click.CardIndex >= 0)
+        if (click.CardIndex >= 0 && click.CardIndex != model.Cursor)
+        {
             model.MoveTo(click.CardIndex);
+            GameAudio.Play(GameSfx.MenuMove);
+        }
 
         if (click.Back)
+        {
+            GameAudio.Play(GameSfx.MenuBack);
             HandleIntent(model.Back());
+        }
 
         if (click.Confirm)
+        {
+            GameAudio.Play(GameSfx.MenuConfirm);
             HandleIntent(model.Confirm());
+        }
     }
 
     private void HandleIntent(CharacterSelectIntent intent)
