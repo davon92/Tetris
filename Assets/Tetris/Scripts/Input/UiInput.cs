@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 /// <summary>
 /// One frame of device-independent menu navigation. Sampling once per frame
 /// keeps every screen reading the same edges and removes the four near-identical
-/// keyboard/gamepad polling blocks the old GameManager carried.
+/// keyboard/gamepad polling blocks the old monolithic game manager carried.
 /// </summary>
 public readonly struct UiInput
 {

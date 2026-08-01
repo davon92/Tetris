@@ -1,6 +1,6 @@
 /// <summary>
 /// The navigation requests a screen can make. Screens depend on this narrow
-/// interface rather than on <see cref="GameManager"/>, so they can be driven
+/// interface rather than on a concrete flow controller, so they can be driven
 /// by a test double.
 /// </summary>
 public interface IGameFlow

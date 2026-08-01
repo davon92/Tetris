@@ -8,7 +8,7 @@ using UnityEngine;
 /// </summary>
 public sealed class StoryBattleBridge : MonoBehaviour
 {
-    [SerializeField] private GameManager gameManager;
+    [SerializeField] private GameFlowController gameFlowController;
 
     private string activeBattleId;
 
@@ -19,20 +19,20 @@ public sealed class StoryBattleBridge : MonoBehaviour
 
     private void Awake()
     {
-        if (gameManager == null)
-            gameManager = GetComponent<GameManager>();
+        if (gameFlowController == null)
+            gameFlowController = GetComponent<GameFlowController>();
     }
 
     private void OnEnable()
     {
-        if (gameManager != null)
-            gameManager.MatchEnded += OnMatchEnded;
+        if (gameFlowController != null)
+            gameFlowController.MatchEnded += OnMatchEnded;
     }
 
     private void OnDisable()
     {
-        if (gameManager != null)
-            gameManager.MatchEnded -= OnMatchEnded;
+        if (gameFlowController != null)
+            gameFlowController.MatchEnded -= OnMatchEnded;
     }
 
     public void RequestBattle(string battleId)
@@ -42,7 +42,7 @@ public sealed class StoryBattleBridge : MonoBehaviour
 
         activeBattleId = battleId;
         BattleRequested?.Invoke(battleId);
-        gameManager?.StartBattle(TetrisGameMode.VersusCpu);
+        gameFlowController?.StartBattle(TetrisGameMode.VersusCpu);
     }
 
     public void ReportBattleResult(string battleId, bool playerWon)

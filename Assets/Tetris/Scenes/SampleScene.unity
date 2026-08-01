@@ -375,7 +375,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1129005749}
   - component: {fileID: 1129005748}
-  - component: {fileID: 1129005750}
   m_Layer: 0
   m_Name: PlayArea
   m_TagString: Untagged
@@ -410,21 +409,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1129005750
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1129005747}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fda51fca46dea454fa80ec9f79c2d04c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Board
-  width: 10
-  height: 40
-  visibleHeight: 20
 --- !u!1 &1503477828
 GameObject:
   m_ObjectHideFlags: 0
@@ -467,11 +451,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 1503477828}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e503eac32c318d140bd527e3c82b7f76, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::GameManager
+  m_Script: {fileID: 11500000, guid: f031523ee77148f48f969057dc966cbf, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Tetris.Runtime::GameFlowController
+  startAtMainMenu: 1
   initialMode: 1
-  cpuDifficulty: 0
+  initialCpuDifficulty: 0
   battleGrid: {fileID: 1129005748}
   piecePrefabs:
   - {fileID: 5842103784334240321, guid: 386ca1f2c70fd79468cf6d80450d6294, type: 3}
@@ -481,6 +466,10 @@ MonoBehaviour:
   - {fileID: 1705138479285749829, guid: 24d9def32a1b0964e93f4893dacbbd85, type: 3}
   - {fileID: 3619625317033187134, guid: d1652cf4742286243a61102bb8550037, type: 3}
   - {fileID: 680577628892057309, guid: e2432147f8394c44b99300d44bd5b08b, type: 3}
+  readyDuration: 1.1
+  startDuration: 0.65
+  resultDuration: 2.25
+  sharedPieceCloseClaimWindow: 0.1
 --- !u!114 &1503477831
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -491,9 +480,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8fe3d726ae158a6458ae3052a0ed6204, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Tetris.Runtime::StoryBattleBridge
-  gameManager: {fileID: 0}
+  gameFlowController: {fileID: 1503477830}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
