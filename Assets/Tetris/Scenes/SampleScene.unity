@@ -452,7 +452,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f031523ee77148f48f969057dc966cbf, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Tetris.Runtime::GameFlowController
   startAtMainMenu: 1
   initialMode: 1
@@ -480,7 +480,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8fe3d726ae158a6458ae3052a0ed6204, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Tetris.Runtime::StoryBattleBridge
   gameFlowController: {fileID: 1503477830}
 --- !u!1660057539 &9223372036854775807

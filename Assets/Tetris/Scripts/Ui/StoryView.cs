@@ -25,7 +25,6 @@ public static class StoryView
         GUI.Label(new Rect(172f, 13f, 296f, 28f), story.Script.LocationTitle, theme.StoryLocation);
 
         StoryLine line = story.CurrentLine;
-        DrawSpeakerFraming(line.Focus);
 
         int clicked = NoClick;
         if (story.HasChoices)
@@ -43,23 +42,6 @@ public static class StoryView
             RetroGui.Fill(RetroGui.CanvasRect, new Color(0.025f, 0.035f, 0.09f));
 
         RetroGui.Fill(RetroGui.CanvasRect, RetroPalette.StoryScrim);
-    }
-
-    /// <summary>Draws the bracket that highlights whoever is speaking.</summary>
-    private static void DrawSpeakerFraming(int focus)
-    {
-        if (focus < 0)
-        {
-            RetroGui.Fill(new Rect(13f, 80f, 3f, 180f), RetroPalette.LyraAccent);
-            RetroGui.Fill(new Rect(13f, 80f, 52f, 3f), RetroPalette.LyraAccent);
-            RetroGui.Fill(new Rect(13f, 257f, 52f, 3f), RetroPalette.LyraAccent);
-        }
-        else if (focus > 0)
-        {
-            RetroGui.Fill(new Rect(624f, 80f, 3f, 180f), RetroPalette.BramAccent);
-            RetroGui.Fill(new Rect(575f, 80f, 52f, 3f), RetroPalette.BramAccent);
-            RetroGui.Fill(new Rect(575f, 257f, 52f, 3f), RetroPalette.BramAccent);
-        }
     }
 
     private static int DrawChoices(StoryDirector story, RetroTheme theme)

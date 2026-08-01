@@ -85,7 +85,10 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
     private void OnGUI()
     {
         EnsureScreens();
-        router.Draw();
+        using (RetroGui.ReferenceCanvas())
+        {
+            router.Draw();
+        }
     }
 
     private void OnDestroy()

@@ -1,22 +1,27 @@
 {
-    "permissions": {
-        "allow": [
-            "PowerShell(\"----\")",
-            "PowerShell(\"---- docs?\")"
+  "permissions": {
+    "allow": [
+      "PowerShell(\"----\")",
+      "PowerShell(\"---- docs?\")",
+      "mcp__UnityMCP__manage_editor",
+      "mcp__UnityMCP__read_console",
+      "mcp__UnityMCP__find_gameobjects",
+      "mcp__UnityMCP__execute_code",
+      "PowerShell(Get-Process | Where-Object { $_.MainWindowTitle -ne \"\" } | Select-Object Id, ProcessName, MainWindowTitle | Format-Table -AutoSize)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:/Users/davon/AppData/Local/JetBrains/Rider2026.2/aia/bundledHooks/quality-check.cmd",
+            "timeout": 30
+          }
         ]
-    },
-    "hooks": {
-        "PostToolUse": [
-            {
-                "matcher": "Edit|Write|MultiEdit|apply_patch",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "C:/Users/davon/AppData/Local/JetBrains/Rider2026.2/aia/bundledHooks/quality-check.cmd",
-                        "timeout": 30
-                    }
-                ]
-            }
-        ]
-    }
+      }
+    ]
+  }
 }

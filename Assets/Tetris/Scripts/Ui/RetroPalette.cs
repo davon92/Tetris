@@ -48,8 +48,6 @@ public static class RetroPalette
     public static readonly Color PortraitNameLeft = new Color(0.08f, 0.03f, 0.13f, 0.96f);
     public static readonly Color PortraitNameRight = new Color(0.02f, 0.1f, 0.16f, 0.96f);
 
-    public static readonly Color LyraAccent = new Color(1f, 0.56f, 0.88f, 0.9f);
-    public static readonly Color BramAccent = new Color(0.38f, 0.88f, 1f, 0.9f);
     public static readonly Color NameplateLyra = new Color(0.25f, 0.055f, 0.28f, 0.98f);
     public static readonly Color NameplateBram = new Color(0.025f, 0.18f, 0.25f, 0.98f);
     public static readonly Color NameplateNeutral = new Color(0.08f, 0.09f, 0.16f, 0.98f);
