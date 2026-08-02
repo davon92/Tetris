@@ -46,6 +46,7 @@ public sealed class SimpleTetrisCpu
     private int targetX;
     private int targetRotation;
     private float timer;
+    private float castTimer;
     private bool hasPlan;
     private bool waitingToDrop;
 
@@ -82,6 +83,8 @@ public sealed class SimpleTetrisCpu
     {
         if (session == null || !session.IsRunning)
             return;
+
+        TickCasting(deltaTime);
 
         if (observedPieceSerial != session.PieceSerial)
         {
@@ -129,6 +132,36 @@ public sealed class SimpleTetrisCpu
         session.ApplyCommand(TetrisCommand.HardDrop);
         hasPlan = false;
         waitingToDrop = false;
+    }
+
+    /// <summary>
+    /// Spells are manual now, so the CPU has to spend its own bar or it would
+    /// simply never cast. It holds a charged bar for a beat first — the player
+    /// gets to see the rival's bar go rainbow before it lands on them, and a
+    /// harder CPU sits on it for less time.
+    /// </summary>
+    private void TickCasting(float deltaTime)
+    {
+        if (!session.CanCastAbility)
+        {
+            castTimer = WithJitter(settings.ThinkDelay * 2f, 0.3f);
+            return;
+        }
+
+        castTimer -= deltaTime;
+        if (castTimer > 0f)
+            return;
+
+        // Mends its own board when it is buried, otherwise swings. Falls back
+        // to whichever spell it can actually pay for.
+        bool buried = session.Model.CountGarbageRows() >= 3 || session.PendingGarbage >= 3;
+        bool defenceFirst = buried && session.CanAfford(session.DefensiveAbility);
+        session.ApplyCommand(
+            defenceFirst || !session.CanAfford(session.OffensiveAbility)
+                ? TetrisCommand.CastDefensive
+                : TetrisCommand.CastOffensive);
+
+        castTimer = WithJitter(settings.ThinkDelay * 2f, 0.3f);
     }
 
     private void Replan()

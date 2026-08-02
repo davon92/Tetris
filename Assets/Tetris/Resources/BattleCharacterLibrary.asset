@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e26adbbf27588b2448f3705ee06f42f4, type: 3}
+  m_Name: BattleCharacterLibrary
+  m_EditorClassIdentifier: Tetris.Runtime::BattleCharacterLibrary
+  characters:
+  - {fileID: 11400000, guid: fe7d54a1fca977243a4173a84c33c30d, type: 2}
+  - {fileID: 11400000, guid: 16fa15e32ea4f834aa5e0c0e535a7e89, type: 2}
+  - {fileID: 11400000, guid: 93b9435776a4ecd408cb3ee6e7c17b75, type: 2}
+  - {fileID: 11400000, guid: 05737645b8b732a46a0486221e133811, type: 2}
+  - {fileID: 11400000, guid: 59c88d41c557cd84bbcbe83e0e712a98, type: 2}
+  - {fileID: 11400000, guid: e16580ae22c912e418c2db65ad734b2e, type: 2}

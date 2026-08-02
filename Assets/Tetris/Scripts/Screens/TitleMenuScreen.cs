@@ -63,8 +63,14 @@ public sealed class TitleMenuScreen : IGameScreen
             case MainMenuIntent.StartStory:
                 flow.BeginStory();
                 break;
+            case MainMenuIntent.StartSolo:
+                flow.BeginMatch(command.Mode);
+                break;
             case MainMenuIntent.OpenCharacterSelect:
-                flow.ShowCharacterSelect(command.VersusMode);
+                flow.ShowCharacterSelect(command.Mode);
+                break;
+            case MainMenuIntent.OpenOptions:
+                flow.ShowOptions();
                 break;
         }
     }

@@ -28,6 +28,12 @@ public sealed class TetrisGameSession : MonoBehaviour
     private const int ManaPieceInterval = 6;
     private const int ManaSpawnPercent = 45;
 
+    /// <summary>Pool size for a fighter who does not override it.</summary>
+    private const int DefaultManaCapacity = 100;
+
+    /// <summary>Charge for each gold cell a clear takes with it, on top of the line payout.</summary>
+    private const int ManaPerManaCell = 25;
+
     private static readonly Color ManaColor = new Color(1f, 0.84f, 0.25f);
 
     private SevenBagRandomizer randomizer;
@@ -57,11 +63,11 @@ public sealed class TetrisGameSession : MonoBehaviour
     public event Action<TetrisGameSession, int> GarbageApplied;
     public event Action<TetrisGameSession, int> GarbageCancelled;
 
-    /// <summary>This player earned their spell — the match routes it at a target.</summary>
-    public event Action<TetrisGameSession, MagicAbility> AbilityCast;
+    /// <summary>This player spent mana on a spell — the match routes it at a target.</summary>
+    public event Action<TetrisGameSession, MagicAbilityDefinition> AbilityCast;
 
     /// <summary>A spell resolved on this board. Carries the cells it destroyed.</summary>
-    public event Action<TetrisGameSession, MagicAbility, Vector2Int[]> AbilityResolved;
+    public event Action<TetrisGameSession, MagicAbilityDefinition, Vector2Int[]> AbilityResolved;
 
     public string DisplayName { get; private set; }
     public TetrisBoardModel Model { get; private set; }
@@ -81,11 +87,59 @@ public sealed class TetrisGameSession : MonoBehaviour
     /// <summary>True while hold has been spent for the current drop.</summary>
     public bool IsHoldLocked => holdUsed;
 
-    /// <summary>The spell this player casts, from their chosen character.</summary>
-    public MagicAbility Ability { get; set; } = MagicAbility.Lightning;
+    /// <summary>The spell aimed at the opponent, from this player's character.</summary>
+    public MagicAbilityDefinition OffensiveAbility { get; set; }
+
+    /// <summary>The spell aimed at this player's own board.</summary>
+    public MagicAbilityDefinition DefensiveAbility { get; set; }
 
     /// <summary>Index into the active piece's cells that is a mana cell, or -1.</summary>
     public int ActiveManaCell { get; private set; } = -1;
+
+    /// <summary>Charge banked toward the next cast, 0..<see cref="ManaCapacity"/>.</summary>
+    public int Mana { get; private set; }
+
+    /// <summary>
+    /// Size of the mana pool, from the character. Costs are absolute, so a
+    /// smaller pool is what makes a fighter cast more often.
+    /// </summary>
+    public int ManaCapacity { get; set; } = DefaultManaCapacity;
+
+    /// <summary>Mana as 0..1, for the bar.</summary>
+    public float ManaCharge => Mathf.Clamp01(Mana / (float)Mathf.Max(1, ManaCapacity));
+
+    /// <summary>
+    /// False in solo. An offensive spell with no opposing board has nowhere to
+    /// land, so the session refuses the cast instead of spending mana on it.
+    /// </summary>
+    public bool HasOpponent { get; set; } = true;
+
+    /// <summary>Enough banked for at least one spell this board could actually cast.</summary>
+    public bool IsSpellReady =>
+        CanAfford(OffensiveAbility) || CanAfford(DefensiveAbility);
+
+    /// <summary>Armed and still alive, so a cast key will actually fire.</summary>
+    public bool CanCastAbility => running && IsSpellReady;
+
+    /// <summary>Where a spell's cost sits on the bar, 0..1. 0 when unequipped.</summary>
+    public float CostFraction(MagicAbilityDefinition ability)
+    {
+        return ability == null
+            ? 0f
+            : Mathf.Clamp01(ability.ManaCost / (float)Mathf.Max(1, ManaCapacity));
+    }
+
+    /// <summary>Equipped, aimable at something, and paid for.</summary>
+    public bool CanAfford(MagicAbilityDefinition ability)
+    {
+        return IsCastable(ability) && Mana >= ability.ManaCost;
+    }
+
+    private bool IsCastable(MagicAbilityDefinition ability)
+    {
+        return ability != null &&
+               (ability.Slot == MagicAbilitySlot.Defensive || HasOpponent);
+    }
 
     /// <summary>Upcoming pieces, nearest first. Reads the shared queue in versus.</summary>
     public TetriminoType[] PeekUpcoming(int count)
@@ -184,7 +238,76 @@ public sealed class TetrisGameSession : MonoBehaviour
             TetrisCommand.RotateClockwise => TryRotate(1),
             TetrisCommand.RotateCounterClockwise => TryRotate(-1),
             TetrisCommand.Hold => Hold(),
+            TetrisCommand.CastOffensive => TryCastAbility(OffensiveAbility),
+            TetrisCommand.CastDefensive => TryCastAbility(DefensiveAbility),
             _ => false
+        };
+    }
+
+    /// <summary>
+    /// Spends mana and casts. Deliberately manual: banked mana is a threat the
+    /// player chooses when to spend, not something that fires the instant it is
+    /// affordable. A press the bar cannot pay for just fizzles.
+    /// </summary>
+    public bool TryCastAbility(MagicAbilityDefinition ability)
+    {
+        if (!running)
+            return false;
+
+        if (!CanAfford(ability))
+        {
+            GameAudio.Play(GameSfx.ManaFizzle);
+            return false;
+        }
+
+        Mana -= ability.ManaCost;
+        AbilityCast?.Invoke(this, ability);
+        return true;
+    }
+
+    /// <summary>
+    /// Banks charge from a clear. The chime on the point that first makes a
+    /// spell affordable is the only cue the player needs to look down.
+    /// </summary>
+    private void GainMana(int amount)
+    {
+        if (amount <= 0 || Mana >= ManaCapacity)
+            return;
+
+        bool wasReady = IsSpellReady;
+        Mana = Mathf.Min(ManaCapacity, Mana + amount);
+        if (IsSpellReady && !wasReady)
+            GameAudio.Play(GameSfx.ManaCharged);
+    }
+
+    /// <summary>
+    /// The opening handicap: buries this board under garbage before the bell.
+    /// Health is read off board fill, so this is exactly a starting health
+    /// penalty — and a recoverable one, since clearing the rows wins it back.
+    /// </summary>
+    public void ApplyStartingGarbage(int rows)
+    {
+        if (rows <= 0 || !running)
+            return;
+
+        int hole = garbageRandom.Next(Model.Width);
+        Model.AddGarbage(rows, line => line % 3 == 0 ? garbageRandom.Next(Model.Width) : hole);
+        RefreshLockedView();
+    }
+
+    /// <summary>
+    /// Charge for a clear alone. Steep enough that a tetris is worth building
+    /// for — three quarters of a bar against a single line's eighth.
+    /// </summary>
+    private static int ManaForLines(int cleared)
+    {
+        return cleared switch
+        {
+            1 => 12,
+            2 => 28,
+            3 => 48,
+            4 => 75,
+            _ => 0
         };
     }
 
@@ -199,40 +322,44 @@ public sealed class TetrisGameSession : MonoBehaviour
     /// the stack without settling it, so the wells and overhangs they leave are
     /// the actual damage; Heal mends the caster's own garbage instead.
     /// </summary>
-    public void ReceiveAbility(MagicAbility ability)
+    public void ReceiveAbility(MagicAbilityDefinition ability)
     {
-        if (!running)
+        if (!running || ability == null)
             return;
 
         List<Vector2Int> affected;
-        switch (ability)
+        switch (ability.Effect)
         {
-            case MagicAbility.Lightning:
+            case MagicEffect.CarveColumns:
             {
-                int start = Mathf.Clamp(Model.FindTallestColumn() - 1, 0, Model.Width - 2);
-                affected = Model.CarveColumns(start, 2);
+                int columns = Mathf.Min(ability.ColumnCount, Model.Width);
+                int start = Mathf.Clamp(
+                    Model.FindTallestColumn() - columns / 2, 0, Model.Width - columns);
+                affected = Model.CarveColumns(start, columns);
                 break;
             }
 
-            case MagicAbility.Starburst:
+            case MagicEffect.Crater:
             {
-                // Clamped so the full 4-wide crater lands on the board, and
-                // sunk a row below the surface so the stack above it survives
-                // as an overhang — the sealed holes are the real damage.
-                int centerX = Mathf.Clamp(Model.FindTallestColumn(), 2, Model.Width - 2);
-                int centerY = Mathf.Max(1, Model.GetColumnHeight(centerX) - 4);
-                affected = Model.CarveCrater(centerX, centerY);
+                // Clamped so the full crater lands on the board, and sunk below
+                // the surface so the stack above it survives as an overhang —
+                // the sealed holes are the real damage.
+                int half = Mathf.Max(1, ability.CraterWidth / 2);
+                int centerX = Mathf.Clamp(Model.FindTallestColumn(), half, Model.Width - half);
+                int centerY = Mathf.Max(1, Model.GetColumnHeight(centerX) - ability.CraterDepth);
+                affected = Model.CarveCrater(
+                    centerX, centerY, ability.CraterWidth, ability.CraterHeight);
                 break;
             }
 
             default:
             {
-                int cancelled = Mathf.Min(PendingGarbage, 4);
+                int cancelled = Mathf.Min(PendingGarbage, ability.GarbageCancelled);
                 PendingGarbage -= cancelled;
                 if (cancelled > 0)
                     GarbageCancelled?.Invoke(this, cancelled);
 
-                Model.MendGarbageRows(2);
+                Model.MendGarbageRows(ability.MendRows);
                 affected = new List<Vector2Int>();
                 break;
             }
@@ -357,7 +484,7 @@ public sealed class TetrisGameSession : MonoBehaviour
 
         Vector2Int[] lockedCells = GetActiveBoardCells();
         int cleared = Model.Place(ActiveType, ActivePosition, ActiveRotation, ActiveManaCell);
-        bool manaCleared = Model.LastClearContainedMana;
+        int manaCellsCleared = Model.LastClearManaCells;
         ActiveManaCell = -1;
         PieceLocked?.Invoke(this, lockedCells);
         // Duck the lock thud when a clear is about to sing over it.
@@ -393,10 +520,10 @@ public sealed class TetrisGameSession : MonoBehaviour
         if (attack > 0)
             AttackGenerated?.Invoke(this, attack);
 
-        // A tetris or a cleared mana cell earns the spell. Tetrises being a
-        // trigger is the whole point: it pays to build for four.
-        if (cleared >= 4 || manaCleared)
-            AbilityCast?.Invoke(this, Ability);
+        // Clears charge the bar instead of casting outright. Bigger clears pay
+        // far more, and a gold cell riding along pays more still — so it stays
+        // worth both building for four and steering the mana block into it.
+        GainMana(ManaForLines(cleared) + manaCellsCleared * ManaPerManaCell);
 
         bool garbageOverflow = false;
         if (PendingGarbage > 0)

@@ -289,19 +289,18 @@ public sealed class BattleEffectsController : MonoBehaviour
     /// <summary>A spell landed on this board: flash every cell it destroyed.</summary>
     private void OnAbilityResolved(
         TetrisGameSession session,
-        MagicAbility ability,
+        MagicAbilityDefinition ability,
         Vector2Int[] destroyed)
     {
-        Color spellColor = ability switch
-        {
-            MagicAbility.Lightning => new Color(0.55f, 0.85f, 1f, 1f),
-            MagicAbility.Starburst => new Color(1f, 0.55f, 0.2f, 1f),
-            _ => new Color(0.45f, 1f, 0.65f, 1f)
-        };
+        // The flash takes the spell's authored accent, so a designer recolours
+        // an effect by recolouring its asset.
+        Color spellColor = ability.Accent;
+        spellColor.a = 1f;
 
-        StartShake(session, 0.4f, ability == MagicAbility.Heal ? 2 : 5);
+        bool mending = ability.Effect == MagicEffect.Mend;
+        StartShake(session, 0.4f, mending ? 2 : 5);
 
-        if (ability == MagicAbility.Heal)
+        if (mending)
         {
             Vector3 healCenter = session.GetBoardWorldPosition(session.Model.Width * 0.5f, 4f);
             for (int i = 0; i < 14; i++)

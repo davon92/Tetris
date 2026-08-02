@@ -14,8 +14,10 @@ public sealed class BattleScreen : IGameScreen
     private readonly IGameFlow flow;
     private readonly RetroTheme theme;
     private readonly BattleArtLibrary art;
-    private readonly PlayerInputRouter playerOneInput = new PlayerInputRouter(PlayerInputBindings.PlayerOne());
-    private readonly PlayerInputRouter playerTwoInput = new PlayerInputRouter(PlayerInputBindings.PlayerTwo());
+    // The shared profiles, so a rebind in the options screen takes effect the
+    // next time a match reads them without any re-wiring.
+    private readonly PlayerInputRouter playerOneInput = new PlayerInputRouter(PlayerInputProfiles.One);
+    private readonly PlayerInputRouter playerTwoInput = new PlayerInputRouter(PlayerInputProfiles.Two);
     private readonly BattleHudMotion hudMotion = new BattleHudMotion();
 
     private MatchPhase lastPhase = MatchPhase.Idle;
@@ -101,10 +103,13 @@ public sealed class BattleScreen : IGameScreen
         hudMotion.VitalsFor(session, match).React(PortraitMood.Hurt);
     }
 
-    /// <summary>Heal lands on the caster, so it reads as a cast, not a hit.</summary>
-    private void OnSpellLanded(TetrisGameSession session, MagicAbility ability, Vector2Int[] cells)
+    /// <summary>A mend lands on the caster, so it reads as a cast, not a hit.</summary>
+    private void OnSpellLanded(
+        TetrisGameSession session,
+        MagicAbilityDefinition ability,
+        Vector2Int[] cells)
     {
-        if (ability == MagicAbility.Heal)
+        if (ability.Effect == MagicEffect.Mend)
         {
             GameAudio.Play(GameSfx.Heal);
             return;
@@ -114,7 +119,7 @@ public sealed class BattleScreen : IGameScreen
         GameAudio.Play(GameSfx.SpellHit);
     }
 
-    private void OnCast(TetrisGameSession session, MagicAbility ability)
+    private void OnCast(TetrisGameSession session, MagicAbilityDefinition ability)
     {
         hudMotion.VitalsFor(session, match).React(PortraitMood.Casting);
         GameAudio.Play(GameSfx.SpellCast);
@@ -122,7 +127,7 @@ public sealed class BattleScreen : IGameScreen
 
     public void Tick(float deltaTime, in UiInput input)
     {
-        hudMotion.Tick(match.PlayerOne, match.PlayerTwo, deltaTime);
+        hudMotion.Tick(match.PlayerOne, match.PlayerTwo, match.SoloRun, deltaTime);
 
         // The shortcuts must run even while the presentation owns the frame:
         // R on the result screen has to work.
@@ -151,7 +156,7 @@ public sealed class BattleScreen : IGameScreen
         {
             if (keyboard.digit1Key.wasPressedThisFrame)
             {
-                flow.BeginMatch(TetrisGameMode.Solo);
+                flow.BeginMatch(TetrisGameMode.Marathon);
                 return;
             }
 
@@ -164,6 +169,12 @@ public sealed class BattleScreen : IGameScreen
             if (keyboard.digit3Key.wasPressedThisFrame)
             {
                 flow.BeginMatch(TetrisGameMode.LocalVersus);
+                return;
+            }
+
+            if (keyboard.digit4Key.wasPressedThisFrame)
+            {
+                flow.BeginMatch(TetrisGameMode.Sprint);
                 return;
             }
 
@@ -246,9 +257,11 @@ public sealed class BattleScreen : IGameScreen
             case MatchPhase.Start:
                 GameAudio.Play(GameSfx.Start);
                 break;
+            // Solo used to be treated as a win outright; with a sprint there is
+            // now a real difference between finishing the run and topping out,
+            // and the director sets PlayerOneWon for exactly that.
             case MatchPhase.Result when match.HasOutcome:
-                bool playerWon = match.PlayerTwo == null || match.PlayerOneWon;
-                GameAudio.Play(playerWon ? GameSfx.Win : GameSfx.Lose);
+                GameAudio.Play(match.PlayerOneWon ? GameSfx.Win : GameSfx.Lose);
                 break;
         }
     }

@@ -49,37 +49,44 @@ public sealed class PlayerInputRouter
             ? Gamepad.all[bindings.GamepadIndex]
             : null;
 
-        // The left stick's synthetic direction buttons count the same as the
-        // d-pad — plenty of players never touch the d-pad at all.
-        bool leftPressed = WasPressed(keyboard, bindings.Left) ||
-            WasPressed(gamepad?.dpad.left) || WasPressed(gamepad?.leftStick.left);
-        bool rightPressed = WasPressed(keyboard, bindings.Right) ||
-            WasPressed(gamepad?.dpad.right) || WasPressed(gamepad?.leftStick.right);
-        bool leftHeld = IsHeld(keyboard, bindings.Left) ||
-            IsHeld(gamepad?.dpad.left) || IsHeld(gamepad?.leftStick.left);
-        bool rightHeld = IsHeld(keyboard, bindings.Right) ||
-            IsHeld(gamepad?.dpad.right) || IsHeld(gamepad?.leftStick.right);
+        // The left stick shadows the four directional actions no matter what
+        // they are bound to. Steering is not worth making a player rebind, and
+        // plenty of them never touch the d-pad at all.
+        bool leftPressed = WasPressed(keyboard, gamepad, GameAction.MoveLeft) ||
+            WasPressed(gamepad?.leftStick.left);
+        bool rightPressed = WasPressed(keyboard, gamepad, GameAction.MoveRight) ||
+            WasPressed(gamepad?.leftStick.right);
+        bool leftHeld = IsHeld(keyboard, gamepad, GameAction.MoveLeft) ||
+            IsHeld(gamepad?.leftStick.left);
+        bool rightHeld = IsHeld(keyboard, gamepad, GameAction.MoveRight) ||
+            IsHeld(gamepad?.leftStick.right);
         UpdateHorizontal(session, leftPressed, rightPressed, leftHeld, rightHeld, deltaTime);
 
-        bool dropPressed = WasPressed(keyboard, bindings.SoftDrop) ||
-            WasPressed(gamepad?.dpad.down) || WasPressed(gamepad?.leftStick.down);
-        bool dropHeld = IsHeld(keyboard, bindings.SoftDrop) ||
-            IsHeld(gamepad?.dpad.down) || IsHeld(gamepad?.leftStick.down);
+        bool dropPressed = WasPressed(keyboard, gamepad, GameAction.SoftDrop) ||
+            WasPressed(gamepad?.leftStick.down);
+        bool dropHeld = IsHeld(keyboard, gamepad, GameAction.SoftDrop) ||
+            IsHeld(gamepad?.leftStick.down);
         UpdateSoftDrop(session, dropPressed, dropHeld, deltaTime);
 
-        if (WasPressed(keyboard, bindings.RotateClockwise) || WasPressed(gamepad?.buttonSouth))
-            Apply(session, TetrisCommand.RotateClockwise);
-
-        if (WasPressed(keyboard, bindings.RotateCounterClockwise) || WasPressed(gamepad?.buttonWest))
-            Apply(session, TetrisCommand.RotateCounterClockwise);
-
-        if (WasPressed(keyboard, bindings.HardDrop) || WasPressed(gamepad?.buttonEast))
+        if (WasPressed(keyboard, gamepad, GameAction.HardDrop) ||
+            WasPressed(gamepad?.leftStick.up))
             Apply(session, TetrisCommand.HardDrop);
 
-        if (WasPressed(keyboard, bindings.Hold) ||
-            WasPressed(gamepad?.leftShoulder) ||
-            WasPressed(gamepad?.rightShoulder))
-            Apply(session, TetrisCommand.Hold);
+        Dispatch(session, keyboard, gamepad, GameAction.RotateClockwise);
+        Dispatch(session, keyboard, gamepad, GameAction.RotateCounterClockwise);
+        Dispatch(session, keyboard, gamepad, GameAction.Hold);
+        Dispatch(session, keyboard, gamepad, GameAction.CastOffensive);
+        Dispatch(session, keyboard, gamepad, GameAction.CastDefensive);
+    }
+
+    private void Dispatch(
+        TetrisGameSession session,
+        Keyboard keyboard,
+        Gamepad gamepad,
+        GameAction action)
+    {
+        if (WasPressed(keyboard, gamepad, action))
+            Apply(session, GameActionInfo.ToCommand(action));
     }
 
     private void UpdateHorizontal(
@@ -159,32 +166,22 @@ public sealed class PlayerInputRouter
             session.ApplyCommand(command);
     }
 
-    private static bool WasPressed(Keyboard keyboard, Key[] keys)
+    private bool WasPressed(Keyboard keyboard, Gamepad gamepad, GameAction action)
     {
-        if (keyboard == null)
-            return false;
+        Key key = bindings.GetKey(action);
+        if (keyboard != null && key != Key.None && keyboard[key].wasPressedThisFrame)
+            return true;
 
-        for (int i = 0; i < keys.Length; i++)
-        {
-            if (keyboard[keys[i]].wasPressedThisFrame)
-                return true;
-        }
-
-        return false;
+        return WasPressed(PadButtonInfo.Resolve(gamepad, bindings.GetPad(action)));
     }
 
-    private static bool IsHeld(Keyboard keyboard, Key[] keys)
+    private bool IsHeld(Keyboard keyboard, Gamepad gamepad, GameAction action)
     {
-        if (keyboard == null)
-            return false;
+        Key key = bindings.GetKey(action);
+        if (keyboard != null && key != Key.None && keyboard[key].isPressed)
+            return true;
 
-        for (int i = 0; i < keys.Length; i++)
-        {
-            if (keyboard[keys[i]].isPressed)
-                return true;
-        }
-
-        return false;
+        return IsHeld(PadButtonInfo.Resolve(gamepad, bindings.GetPad(action)));
     }
 
     private static bool WasPressed(ButtonControl button)

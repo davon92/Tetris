@@ -83,6 +83,13 @@ public sealed class MatchDirector
     public TetrisGameSession PlayerTwo => playerTwo;
     public SharedPieceQueue SharedQueue { get; private set; }
 
+    /// <summary>
+    /// The solo objective and clock, or null in versus. Doubles as the "this is
+    /// a one-board run" test the HUD reads, so result copy and the retry prompt
+    /// never have to enumerate the solo modes themselves.
+    /// </summary>
+    public SoloRun SoloRun { get; private set; }
+
     /// <summary>Most recent garbage event for this seat, or null once it has faded.</summary>
     public BattleCallout? PlayerOneCallout =>
         playerOneCalloutTimer > 0f ? new BattleCallout(playerOneCalloutText, playerOneCalloutKind) : (BattleCallout?)null;
@@ -126,11 +133,17 @@ public sealed class MatchDirector
         PlayerTwoCharacter = setup.PlayerTwoCharacter;
         EncounterTitle = setup.EncounterTitle;
 
-        SharedQueue = setup.Mode == TetrisGameMode.Solo
+        SoloRun = !setup.IsSolo
+            ? null
+            : setup.SoloLineTarget > 0
+                ? SoloRun.Sprint(setup.SoloLineTarget)
+                : SoloRun.Marathon();
+
+        SharedQueue = setup.IsSolo
             ? null
             : new SharedPieceQueue(SharedQueueSeed, settings.SharedPieceCloseClaimWindow);
 
-        if (setup.Mode == TetrisGameMode.Solo)
+        if (setup.IsSolo)
         {
             playerOne = CreateSession("PLAYER", SoloOrigin, PlayerOneSeed);
         }
@@ -156,14 +169,15 @@ public sealed class MatchDirector
             playerTwo.GarbageCancelled += (_, cancelled) => SetCallout(false, $"BLOCKED {cancelled}", BattleCalloutKind.Blocked);
             playerTwo.GarbageApplied += (_, lines) => SetCallout(false, $"+{lines} INCOMING", BattleCalloutKind.Incoming);
 
-            playerOne.Ability = BattleCharacterRoster.Get(setup.PlayerOneCharacter).Ability;
-            playerTwo.Ability = BattleCharacterRoster.Get(setup.PlayerTwoCharacter).Ability;
-            playerOne.AbilityCast += OnAbilityCast;
-            playerTwo.AbilityCast += OnAbilityCast;
+            ApplyCharacter(playerTwo, BattleCharacterRoster.Get(setup.PlayerTwoCharacter));
 
             if (setup.Mode == TetrisGameMode.VersusCpu)
                 cpu = new SimpleTetrisCpu(playerTwo, setup.Difficulty, CpuSeed);
         }
+
+        // Solo collects mana from the same gold cells, so it gets spells too —
+        // see OnAbilityCast for what a spell with nobody to aim at does.
+        ApplyCharacter(playerOne, BattleCharacterRoster.Get(setup.PlayerOneCharacter));
 
         playerOne.GameOver += OnSessionGameOver;
         if (playerTwo != null)
@@ -185,6 +199,7 @@ public sealed class MatchDirector
         DestroySession(ref playerTwo);
         cpu = null;
         SharedQueue = null;
+        SoloRun = null;
 
         Phase = MatchPhase.Idle;
         phaseTimer = 0f;
@@ -198,11 +213,29 @@ public sealed class MatchDirector
         playerTwoCalloutTimer = 0f;
     }
 
-    /// <summary>Heal mends the caster; everything else lands on the opponent.</summary>
-    private void OnAbilityCast(TetrisGameSession caster, MagicAbility ability)
+    /// <summary>
+    /// Stamps a fighter's authored numbers onto their board: the two spells,
+    /// the size of their mana pool, and the garbage handicap they open under.
+    /// </summary>
+    private void ApplyCharacter(TetrisGameSession session, BattleCharacter character)
+    {
+        session.OffensiveAbility = character.OffensiveAbility;
+        session.DefensiveAbility = character.DefensiveAbility;
+        session.ManaCapacity = character.ManaCapacity;
+
+        // Solo has nobody to aim offence at, so the session refuses that cast
+        // rather than turning the spell on its own owner.
+        session.HasOpponent = playerTwo != null;
+
+        session.AbilityCast += OnAbilityCast;
+        session.ApplyStartingGarbage(character.StartingGarbage);
+    }
+
+    /// <summary>Defensive spells land on the caster; offensive ones cross over.</summary>
+    private void OnAbilityCast(TetrisGameSession caster, MagicAbilityDefinition ability)
     {
         bool casterIsPlayerOne = caster == playerOne;
-        TetrisGameSession target = ability == MagicAbility.Heal
+        TetrisGameSession target = ability.Slot == MagicAbilitySlot.Defensive
             ? caster
             : casterIsPlayerOne ? playerTwo : playerOne;
 
@@ -210,7 +243,7 @@ public sealed class MatchDirector
             return;
 
         target.ReceiveAbility(ability);
-        SetCallout(casterIsPlayerOne, MagicAbilityInfo.DisplayName(ability), BattleCalloutKind.Magic);
+        SetCallout(casterIsPlayerOne, ability.DisplayName, BattleCalloutKind.Magic);
     }
 
     private void SetCallout(bool forPlayerOne, string text, BattleCalloutKind kind)
@@ -291,6 +324,32 @@ public sealed class MatchDirector
         playerOne.Tick(deltaTime);
         if (playerTwo != null)
             playerTwo.Tick(deltaTime);
+
+        // The phase is re-checked because a top-out inside those ticks has
+        // already decided the run — a sprint that dies on its fortieth line
+        // must not also be credited with clearing it.
+        if (SoloRun != null && Phase == MatchPhase.Playing &&
+            SoloRun.Tick(deltaTime, playerOne.Lines))
+        {
+            OnSoloTargetReached();
+        }
+    }
+
+    /// <summary>
+    /// A finished sprint is a win rather than a K.O.: the board stops where it
+    /// stands, the clock freezes, and the normal result beat runs.
+    /// </summary>
+    private void OnSoloTargetReached()
+    {
+        HasOutcome = true;
+        PlayerOneWon = true;
+        WinnerName = playerOne != null ? playerOne.DisplayName : "PLAYER";
+        LoserName = string.Empty;
+
+        playerOne?.Stop();
+
+        Phase = MatchPhase.Result;
+        phaseTimer = settings.ResultDuration;
     }
 
     private TetrisGameSession CreateSession(string displayName, Vector3Int gridOrigin, int seed)

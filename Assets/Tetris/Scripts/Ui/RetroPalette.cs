@@ -53,6 +53,11 @@ public static class RetroPalette
     public static readonly Color NameplateBram = new Color(0.025f, 0.18f, 0.25f, 0.98f);
     public static readonly Color NameplateNeutral = new Color(0.08f, 0.09f, 0.16f, 0.98f);
 
+    public static readonly Color ManaTrack = new Color(0.03f, 0.04f, 0.11f, 0.95f);
+    public static readonly Color ManaFill = new Color(0.19f, 0.47f, 0.96f);
+    public static readonly Color ManaFillBright = new Color(0.52f, 0.79f, 1f);
+    public static readonly Color ManaBorder = new Color(0.36f, 0.66f, 1f, 0.9f);
+
     public static readonly Color ScorePlateFill = new Color(0.05f, 0.032f, 0.11f, 0.96f);
     public static readonly Color ChipFill = new Color(0.03f, 0.05f, 0.13f, 0.92f);
     public static readonly Color DangerFlash = new Color(1f, 0.32f, 0.38f, 0.9f);

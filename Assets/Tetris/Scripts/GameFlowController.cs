@@ -22,6 +22,7 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
 
     private readonly ScreenRouter router = new ScreenRouter();
     private readonly MainMenuModel mainMenuModel = new MainMenuModel();
+    private readonly OptionsModel optionsModel = new OptionsModel();
     private readonly CharacterSelectModel characterSelectModel = new CharacterSelectModel();
     private readonly StoryDirector storyDirector = new StoryDirector(new PrologueStoryScript());
 
@@ -32,6 +33,7 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
     private BattleArtLibrary art;
 
     private TitleMenuScreen titleMenuScreen;
+    private OptionsScreen optionsScreen;
     private CharacterSelectScreen characterSelectScreen;
     private StoryScreen storyScreen;
     private BattleScreen battleScreen;
@@ -46,14 +48,17 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
     {
         mainMenuModel.Difficulty = initialCpuDifficulty;
 
+        // The bootstrap scene has normally done this already; the repeat call is
+        // a no-op and is what lets this scene be entered directly in the editor.
+        // Audio deliberately is not added to this object any more — it lives on
+        // its own persistent host so it survives the scene load.
+        GameBootstrap.EnsureInitialized();
+
+        // Effects stay scene-local: they spawn world-space objects positioned
+        // against the boards, which do not outlive the scene that holds them.
         battleEffects = GetComponent<BattleEffectsController>();
         if (battleEffects == null)
             battleEffects = gameObject.AddComponent<BattleEffectsController>();
-
-        // Synthesizing the first clip costs a few ms; do it before the first
-        // frame rather than on the first keypress.
-        if (GetComponent<GameAudio>() == null)
-            gameObject.AddComponent<GameAudio>();
 
         MatchSettings settings = new MatchSettings(
             readyDuration,
@@ -121,6 +126,7 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
         art = new BattleArtLibrary();
 
         titleMenuScreen = new TitleMenuScreen(mainMenuModel, this, theme);
+        optionsScreen = new OptionsScreen(optionsModel, this, theme);
         characterSelectScreen = new CharacterSelectScreen(
             characterSelectModel, this, theme, art, () => mainMenuModel.Difficulty);
         storyScreen = new StoryScreen(storyDirector, this, theme, art, () => mainMenuModel.Difficulty);
@@ -154,6 +160,17 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
         GameAudio.PlayMusic(GameMusic.Menu);
     }
 
+    public void ShowOptions()
+    {
+        router.GoTo(optionsScreen);
+    }
+
+    public void CloseOptions()
+    {
+        mainMenuModel.ShowRoot(MainMenuModel.OptionsRow);
+        router.GoTo(titleMenuScreen);
+    }
+
     public void ShowCharacterSelect(TetrisGameMode versusMode)
     {
         CancelStoryIfRunning();
@@ -169,7 +186,7 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
         if (pendingVersusMode == TetrisGameMode.VersusCpu)
             mainMenuModel.ShowCpuDifficulty();
         else
-            mainMenuModel.ShowRoot(2);
+            mainMenuModel.ShowVersusMode(MainMenuModel.VersusPlayerRow);
 
         router.GoTo(titleMenuScreen);
         GameAudio.PlayMusic(GameMusic.Menu);
@@ -213,14 +230,17 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
     {
         MatchSetup setup = storyDirector.IsRunning
             ? new MatchSetup(mode, mainMenuModel.Difficulty, 0, 1, true, storyDirector.Script.EncounterTitle)
-            : mode == TetrisGameMode.Solo
-                ? MatchSetup.Solo()
-                : new MatchSetup(
+            : mode switch
+            {
+                TetrisGameMode.Marathon => MatchSetup.Marathon(),
+                TetrisGameMode.Sprint => MatchSetup.Sprint(),
+                _ => new MatchSetup(
                     mode,
                     mainMenuModel.Difficulty,
                     characterSelectModel.PlayerOneIndex,
                     characterSelectModel.PlayerTwoIndex,
-                    false);
+                    false)
+            };
 
         matchDirector.Begin(setup);
         router.GoTo(battleScreen);

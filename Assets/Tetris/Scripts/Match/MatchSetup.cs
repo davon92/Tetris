@@ -30,7 +30,8 @@ public readonly struct MatchSetup
         int playerOneCharacter,
         int playerTwoCharacter,
         bool isStoryBattle,
-        string encounterTitle = null)
+        string encounterTitle = null,
+        int soloLineTarget = 0)
     {
         Mode = mode;
         Difficulty = difficulty;
@@ -38,6 +39,7 @@ public readonly struct MatchSetup
         PlayerTwoCharacter = playerTwoCharacter;
         IsStoryBattle = isStoryBattle;
         EncounterTitle = encounterTitle ?? string.Empty;
+        SoloLineTarget = soloLineTarget;
     }
 
     public TetrisGameMode Mode { get; }
@@ -46,15 +48,33 @@ public readonly struct MatchSetup
     public int PlayerTwoCharacter { get; }
     public bool IsStoryBattle { get; }
 
+    /// <summary>Lines a sprint has to clear. 0 means the run is endless.</summary>
+    public int SoloLineTarget { get; }
+
+    /// <summary>
+    /// The one-board modes. Asked as a question about the setup rather than
+    /// compared against a mode everywhere, so adding a third solo variant is
+    /// one edit here instead of a hunt through the director and the HUD.
+    /// </summary>
+    public bool IsSolo => Mode == TetrisGameMode.Marathon || Mode == TetrisGameMode.Sprint;
+
     /// <summary>
     /// Chapter-supplied banner. Empty falls back to a title derived from the mode,
     /// which keeps encounter copy in the story layer instead of the HUD.
     /// </summary>
     public string EncounterTitle { get; }
 
-    public static MatchSetup Solo()
+    /// <summary>Endless solo. The second character index is unused but harmless.</summary>
+    public static MatchSetup Marathon()
     {
-        return new MatchSetup(TetrisGameMode.Solo, CpuDifficulty.Easy, 0, 1, false);
+        return new MatchSetup(TetrisGameMode.Marathon, CpuDifficulty.Easy, 0, 1, false);
+    }
+
+    /// <summary>Solo race to a line target.</summary>
+    public static MatchSetup Sprint(int lineTarget = SoloRun.DefaultSprintTarget)
+    {
+        return new MatchSetup(
+            TetrisGameMode.Sprint, CpuDifficulty.Easy, 0, 1, false, null, lineTarget);
     }
 }
 

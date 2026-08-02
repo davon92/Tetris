@@ -75,7 +75,7 @@ public static class CharacterSelectView
 
     private static void DrawInfoPanel(CharacterSelectModel model, RetroTheme theme)
     {
-        BattleCharacterDefinition selected = BattleCharacterRoster.Get(model.Cursor);
+        BattleCharacter selected = BattleCharacterRoster.Get(model.Cursor);
         bool unlocked = BattleCharacterRoster.IsUnlocked(model.Cursor);
 
         RetroGui.Panel(
@@ -106,7 +106,7 @@ public static class CharacterSelectView
         RetroTheme theme,
         BattleArtLibrary art)
     {
-        BattleCharacterDefinition character = BattleCharacterRoster.Get(characterIndex);
+        BattleCharacter character = BattleCharacterRoster.Get(characterIndex);
         bool unlocked = BattleCharacterRoster.IsUnlocked(characterIndex);
         bool selected = model.Cursor == characterIndex;
         bool chosenByPlayerOne =

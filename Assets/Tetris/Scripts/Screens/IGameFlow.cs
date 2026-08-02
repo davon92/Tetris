@@ -13,6 +13,11 @@ public interface IGameFlow
     /// <summary>Back out of the roster picker to the page it was opened from.</summary>
     void CloseCharacterSelect();
 
+    void ShowOptions();
+
+    /// <summary>Back out of options to the title menu row it was opened from.</summary>
+    void CloseOptions();
+
     void BeginStory();
 
     /// <summary>Ask the story bridge for this chapter's battle.</summary>

@@ -64,8 +64,14 @@ public sealed class TetrisBoardModel
     /// <summary>Cell value for a gold mana cell — clearing its row casts the owner's ability.</summary>
     public const int ManaCell = 9;
 
+    /// <summary>
+    /// How many gold mana cells the most recent clear removed. The charge a
+    /// clear is worth scales with this, so it is a count and not a flag.
+    /// </summary>
+    public int LastClearManaCells { get; private set; }
+
     /// <summary>True when the most recent clear removed at least one mana cell.</summary>
-    public bool LastClearContainedMana { get; private set; }
+    public bool LastClearContainedMana => LastClearManaCells > 0;
 
     public int Place(TetriminoType type, Vector2Int position, int rotation)
     {
@@ -180,25 +186,32 @@ public sealed class TetrisBoardModel
     }
 
     /// <summary>
-    /// Starburst: blows a 2-4-4-2 crater out of the stack, centered on the
-    /// tallest column. Cells above the crater are deliberately left floating —
-    /// the overhangs are the damage, since they seal holes that need S/Z/J/L
-    /// tucks rather than a clean refill.
+    /// Blows a tapered crater out of the stack, centered on <paramref name="centerX"/>
+    /// and widest through the middle (the shipped 4x4 is the classic 2-4-4-2).
+    /// Cells above the crater are deliberately left floating — the overhangs are
+    /// the damage, since they seal holes that need S/Z/J/L tucks rather than a
+    /// clean refill.
     /// </summary>
-    public List<Vector2Int> CarveCrater(int centerX, int centerY)
+    public List<Vector2Int> CarveCrater(int centerX, int centerY, int width = 4, int height = 4)
     {
-        int[] rowWidths = { 2, 4, 4, 2 };
-        List<Vector2Int> destroyed = new();
+        width = Mathf.Max(2, width);
+        height = Mathf.Max(1, height);
 
-        for (int row = 0; row < rowWidths.Length; row++)
+        List<Vector2Int> destroyed = new();
+        float middle = (height - 1) * 0.5f;
+
+        for (int row = 0; row < height; row++)
         {
-            int y = centerY + rowWidths.Length / 2 - row;
+            int y = centerY + height / 2 - row;
             if (y < 0 || y >= Height)
                 continue;
 
-            int width = rowWidths[row];
-            int startX = centerX - width / 2;
-            for (int x = startX; x < startX + width; x++)
+            // Rows step in by two per whole row away from the middle, which
+            // reproduces 2-4-4-2 at 4x4 and tapers sensibly at any other size.
+            int taper = Mathf.FloorToInt(Mathf.Abs(row - middle));
+            int rowWidth = Mathf.Max(1, width - taper * 2);
+            int startX = centerX - rowWidth / 2;
+            for (int x = startX; x < startX + rowWidth; x++)
             {
                 if (x < 0 || x >= Width || cells[x, y] == 0)
                     continue;
@@ -328,7 +341,7 @@ public sealed class TetrisBoardModel
     private int ClearFullLines()
     {
         lastClearedRows.Clear();
-        LastClearContainedMana = false;
+        LastClearManaCells = 0;
         int writeRow = 0;
         int cleared = 0;
 
@@ -351,7 +364,7 @@ public sealed class TetrisBoardModel
                 for (int x = 0; x < Width; x++)
                 {
                     if (cells[x, readRow] == ManaCell)
-                        LastClearContainedMana = true;
+                        LastClearManaCells++;
                 }
 
                 continue;

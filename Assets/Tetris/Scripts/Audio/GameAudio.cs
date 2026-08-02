@@ -59,6 +59,19 @@ public sealed class GameAudio : MonoBehaviour
         EnsureSources();
     }
 
+    /// <summary>
+    /// Keeps the audio host alive across scene loads, so music carries through
+    /// a transition instead of restarting. Only applied to a root object — the
+    /// host <see cref="Instance"/> builds for itself always is one, but a
+    /// scene-authored component parented under something else must not drag its
+    /// whole hierarchy into the next scene.
+    /// </summary>
+    public void MarkPersistent()
+    {
+        if (transform.parent == null)
+            DontDestroyOnLoad(gameObject);
+    }
+
     private void OnDestroy()
     {
         if (instance == this)

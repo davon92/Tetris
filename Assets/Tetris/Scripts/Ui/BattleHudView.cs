@@ -13,11 +13,33 @@ using UnityEngine;
 /// </summary>
 public static class BattleHudView
 {
-    private const string SoloHelp =
-        "MOVE A/D   DOWN S   ROTATE W/Q   DROP SPACE   HOLD SHIFT   START/ESC MENU";
+    /// <summary>
+    /// Built from the live bindings rather than written out, so a rebind in the
+    /// options screen is reflected here instead of quietly lying to the player.
+    /// </summary>
+    private static string BuildHelp(bool versus)
+    {
+        PlayerInputBindings one = PlayerInputProfiles.One;
+        string seatOne =
+            $"{one.KeyLabel(GameAction.MoveLeft)}/{one.KeyLabel(GameAction.MoveRight)} • " +
+            $"{one.KeyLabel(GameAction.SoftDrop)} • " +
+            $"{one.KeyLabel(GameAction.RotateClockwise)}/{one.KeyLabel(GameAction.RotateCounterClockwise)} • " +
+            $"{one.KeyLabel(GameAction.HardDrop)} • {one.KeyLabel(GameAction.Hold)} • " +
+            $"{one.KeyLabel(GameAction.CastOffensive)}/{one.KeyLabel(GameAction.CastDefensive)}";
 
-    private const string VersusHelp =
-        "P1  A/D • S • W/Q • SPACE • SHIFT      P2  ARROWS • CTRL • ENTER • R-SHIFT      ESC MENU";
+        if (!versus)
+            return $"P1  {seatOne}      ESC MENU";
+
+        PlayerInputBindings two = PlayerInputProfiles.Two;
+        string seatTwo =
+            $"{two.KeyLabel(GameAction.MoveLeft)}/{two.KeyLabel(GameAction.MoveRight)} • " +
+            $"{two.KeyLabel(GameAction.SoftDrop)} • " +
+            $"{two.KeyLabel(GameAction.RotateClockwise)}/{two.KeyLabel(GameAction.RotateCounterClockwise)} • " +
+            $"{two.KeyLabel(GameAction.HardDrop)} • {two.KeyLabel(GameAction.Hold)} • " +
+            $"{two.KeyLabel(GameAction.CastOffensive)}/{two.KeyLabel(GameAction.CastDefensive)}";
+
+        return $"P1  {seatOne}      P2  {seatTwo}      ESC MENU";
+    }
 
     // Versus geometry: boards at (128,80,160,320) and (352,80,160,320); the
     // strip y=48..72 above each board belongs to the world-space garbage dots.
@@ -59,7 +81,7 @@ public static class BattleHudView
 
         GUI.Label(
             new Rect(12f, 460f, 616f, 16f),
-            match.Mode == TetrisGameMode.LocalVersus ? VersusHelp : SoloHelp,
+            BuildHelp(match.Mode == TetrisGameMode.LocalVersus),
             theme.Help);
 
         DrawIntroOverlay(match, theme);
@@ -72,7 +94,7 @@ public static class BattleHudView
         Rect panel = new Rect(230f, 292f, 180f, 100f);
         RetroGui.Panel(panel, RetroPalette.OverlayPanel, RetroPalette.Gold, 2f);
 
-        string primary = match.Mode == TetrisGameMode.Solo ? "RETRY" : "REMATCH";
+        string primary = match.SoloRun != null ? "RETRY" : "REMATCH";
         int clicked = NoClick;
         if (theme.Button(new Rect(245f, 302f, 150f, 36f), primary, selection == 0, 14))
             clicked = 0;
@@ -108,8 +130,10 @@ public static class BattleHudView
 
         switch (match.Mode)
         {
-            case TetrisGameMode.Solo:
-                return "SOLO TRIAL";
+            case TetrisGameMode.Marathon:
+                return "SOLO MARATHON";
+            case TetrisGameMode.Sprint:
+                return "LINE SPRINT";
             case TetrisGameMode.VersusCpu:
                 return "RIVAL BATTLE";
             default:
@@ -125,8 +149,8 @@ public static class BattleHudView
         BattleArtLibrary art,
         BattleHudMotion motion)
     {
-        BattleCharacterDefinition left = BattleCharacterRoster.Get(match.PlayerOneCharacter);
-        BattleCharacterDefinition right = BattleCharacterRoster.Get(match.PlayerTwoCharacter);
+        BattleCharacter left = BattleCharacterRoster.Get(match.PlayerOneCharacter);
+        BattleCharacter right = BattleCharacterRoster.Get(match.PlayerTwoCharacter);
 
         DrawNameRibbon(
             new Rect(4f, 6f, 168f, 28f), match.PlayerOne.DisplayName, "1P",
@@ -174,15 +198,35 @@ public static class BattleHudView
             match.PlayerTwoCallout, match.PlayerTwoCalloutAge, motion.PlayerTwoVitals);
 
         // Banded across the bottom of each portrait, directly above the
-        // nameplate — the fighter and their vitality read as one unit.
-        DrawHealthBar(new Rect(8f, 331f, 108f, 14f), motion.PlayerOneVitals, left.Accent, false, theme);
-        DrawHealthBar(new Rect(524f, 331f, 108f, 14f), motion.PlayerTwoVitals, right.Accent, true, theme);
+        // nameplate — the fighter, their vitality and their charge read as one
+        // unit, health over mana in that order.
+        DrawHealthBar(new Rect(8f, 320f, 108f, 12f), motion.PlayerOneVitals, left.Accent, false, theme);
+        DrawHealthBar(new Rect(524f, 320f, 108f, 12f), motion.PlayerTwoVitals, right.Accent, true, theme);
+
+        // The CPU seat gets no key prompt — nobody is pressing anything there.
+        bool humanTwo = match.Mode == TetrisGameMode.LocalVersus;
+        DrawManaBar(new Rect(8f, 333f, 108f, 14f), motion.PlayerOneVitals, false, theme);
+        DrawManaBar(new Rect(524f, 333f, 108f, 14f), motion.PlayerTwoVitals, true, theme);
 
         DrawNameplate(new Rect(8f, 347f, 108f, 25f), left.DisplayName, left.Accent, theme);
         DrawNameplate(new Rect(524f, 347f, 108f, 25f), right.DisplayName, right.Accent, theme);
 
-        DrawSpellPlate(new Rect(8f, 180f, 108f, 14f), left.Ability, theme);
-        DrawSpellPlate(new Rect(524f, 180f, 108f, 14f), right.Ability, theme);
+        // Offensive over defensive, banded across the top of the portrait, each
+        // lighting up the moment its own cost is covered. The stat chips run to
+        // y=174, so these have to start below that.
+        DrawSpellPlate(new Rect(8f, 180f, 108f, 13f), left.OffensiveAbility,
+            motion.PlayerOneVitals.OffensiveReady,
+            PlayerInputProfiles.One.KeyLabel(GameAction.CastOffensive), theme);
+        DrawSpellPlate(new Rect(8f, 194f, 108f, 13f), left.DefensiveAbility,
+            motion.PlayerOneVitals.DefensiveReady,
+            PlayerInputProfiles.One.KeyLabel(GameAction.CastDefensive), theme);
+
+        DrawSpellPlate(new Rect(524f, 180f, 108f, 13f), right.OffensiveAbility,
+            motion.PlayerTwoVitals.OffensiveReady,
+            humanTwo ? PlayerInputProfiles.Two.KeyLabel(GameAction.CastOffensive) : null, theme);
+        DrawSpellPlate(new Rect(524f, 194f, 108f, 13f), right.DefensiveAbility,
+            motion.PlayerTwoVitals.DefensiveReady,
+            humanTwo ? PlayerInputProfiles.Two.KeyLabel(GameAction.CastDefensive) : null, theme);
 
         if (match.HasOutcome)
         {
@@ -208,6 +252,7 @@ public static class BattleHudView
     private static void DrawSoloHud(MatchDirector match, RetroTheme theme, BattleHudMotion motion)
     {
         TetrisGameSession player = match.PlayerOne;
+        bool racing = match.SoloRun != null && match.SoloRun.IsRace;
 
         DrawNameRibbon(
             new Rect(4f, 6f, 168f, 28f), player.DisplayName, "1P",
@@ -215,8 +260,12 @@ public static class BattleHudView
             match.PlayerOneCallout, match.PlayerOneCalloutAge);
 
         DrawHoldBox(new Rect(160f, 80f, 72f, 56f), player, motion.PlayerOne, theme);
+
+        // In a sprint the same chip carries the target, because what the player
+        // needs is the distance left, not the count so far.
         DrawStatChip(new Rect(160f, 144f, 72f, 24f), "LINES",
-            motion.PlayerOne.LinesText, motion.PlayerOne.LinesFlash, false, theme);
+            racing ? motion.GoalText : motion.PlayerOne.LinesText,
+            motion.PlayerOne.LinesFlash, false, theme);
         DrawStatChip(new Rect(160f, 174f, 72f, 24f), "LEVEL",
             motion.PlayerOne.LevelText, motion.PlayerOne.LevelFlash, true, theme);
 
@@ -229,14 +278,58 @@ public static class BattleHudView
 
         DrawHealthBar(new Rect(160f, 234f, 72f, 14f), motion.PlayerOneVitals,
             RetroPalette.Gold, false, theme);
+        DrawManaBar(new Rect(160f, 250f, 72f, 14f), motion.PlayerOneVitals, false, theme);
+
+        // Solo has no opponent, so only the defensive spell is castable.
+        DrawSpellPlate(
+            new Rect(160f, 266f, 72f, 13f),
+            BattleCharacterRoster.Get(match.PlayerOneCharacter).DefensiveAbility,
+            motion.PlayerOneVitals.DefensiveReady,
+            PlayerInputProfiles.One.KeyLabel(GameAction.CastDefensive),
+            theme);
 
         DrawNextQueue(new Rect(408f, 80f, 56f, 130f), motion.Upcoming, theme);
+
+        // The clock is the sprint's result, so it gets a plate of its own under
+        // the spell band. Marathon is scored, not timed, and keeps its old HUD.
+        if (racing)
+            DrawClockPlate(new Rect(160f, 285f, 72f, 38f), match, motion, theme);
 
         DrawScorePlate(new Rect(240f, 404f, 160f, 40f), player,
             motion.PlayerOne, RetroPalette.Gold, theme);
 
         DrawToast(SoloBoard, match.PlayerOneCallout, match.PlayerOneCalloutAge,
             match.PlayerOneCalloutTimeLeft, false, theme);
+    }
+
+    /// <summary>
+    /// The running sprint clock. It goes gold and stops moving the moment the
+    /// target is met, so the number the player came for is the one left frozen
+    /// on screen behind the result banner.
+    /// </summary>
+    private static void DrawClockPlate(
+        Rect rect,
+        MatchDirector match,
+        BattleHudMotion motion,
+        RetroTheme theme)
+    {
+        bool finished = match.SoloRun.IsComplete;
+        RetroGui.Panel(
+            rect,
+            RetroPalette.ScorePlateFill,
+            finished ? RetroPalette.GoldBright : RetroPalette.BorderCyan,
+            2f);
+
+        GUI.Label(new Rect(rect.x + 6f, rect.y + 2f, 60f, 10f), "TIME", theme.ScoreTag);
+
+        Color previous = GUI.color;
+        if (finished)
+            GUI.color = RetroPalette.GoldBright;
+        GUI.Label(
+            new Rect(rect.x + 6f, rect.y + 12f, rect.width - 12f, 22f),
+            motion.ClockText,
+            theme.ChipValue);
+        GUI.color = previous;
     }
 
     // ------------------------------------------------------------- elements
@@ -478,16 +571,171 @@ public static class BattleHudView
     }
 
     /// <summary>
-    /// The character's spell, banded across the top of their portrait so the
-    /// reward for a tetris or a gold cell is always legible.
+    /// The blue charge bar under the health bar. Line clears fill it — bigger
+    /// clears and gold mana cells pay more — and a full bar goes rainbow and
+    /// pulses, which is the tell that the cast key will actually fire.
+    /// Player two's bar fills right-to-left so both read outward from center.
     /// </summary>
-    private static void DrawSpellPlate(Rect rect, MagicAbility ability, RetroTheme theme)
+    private static void DrawManaBar(
+        Rect rect,
+        BattleVitals vitals,
+        bool mirrored,
+        RetroTheme theme)
+    {
+        // The bar swells for a beat at the moment it tops out.
+        float charge = vitals.ChargeStrength;
+        if (charge > 0f)
+        {
+            float grow = Mathf.Round(charge * 2f);
+            rect = new Rect(
+                rect.x - grow, rect.y - grow,
+                rect.width + grow * 2f, rect.height + grow * 2f);
+        }
+
+        RetroGui.Fill(rect, RetroPalette.ManaTrack);
+
+        const float Inset = 2f;
+        Rect inner = new Rect(
+            rect.x + Inset, rect.y + Inset,
+            rect.width - Inset * 2f, rect.height - Inset * 2f);
+
+        float fillWidth = inner.width * Mathf.Clamp01(vitals.DisplayedMana);
+        Rect fill = mirrored
+            ? new Rect(inner.xMax - fillWidth, inner.y, fillWidth, inner.height)
+            : new Rect(inner.x, inner.y, fillWidth, inner.height);
+
+        if (!vitals.SpellReady)
+        {
+            DrawChargingMana(fill, mirrored);
+            DrawCostTicks(inner, vitals, mirrored);
+            RetroGui.Border(rect, RetroPalette.ManaBorder, 1f);
+            return;
+        }
+
+        DrawChargedMana(fill);
+        DrawCostTicks(inner, vitals, mirrored);
+
+        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 7f);
+        RetroGui.Border(inner, new Color(1f, 1f, 1f, 0.2f + 0.35f * pulse), 1f);
+        RetroGui.Border(rect, Color.Lerp(RetroPalette.ManaBorder, Color.white, pulse), 1f);
+    }
+
+    /// <summary>
+    /// A notch on the bar for each spell's cost, so the player can see how far
+    /// off the next cast is instead of guessing. The notch goes bright once the
+    /// bar has passed it and that spell is affordable.
+    /// </summary>
+    private static void DrawCostTicks(Rect inner, BattleVitals vitals, bool mirrored)
+    {
+        DrawCostTick(inner, vitals.OffensiveCost, vitals.OffensiveReady, mirrored);
+        DrawCostTick(inner, vitals.DefensiveCost, vitals.DefensiveReady, mirrored);
+    }
+
+    private static void DrawCostTick(Rect inner, float cost, bool afforded, bool mirrored)
+    {
+        // A cost of 0 means the slot is empty, and a full-bar cost sits under
+        // the border where a notch would only look like a rendering seam.
+        if (cost <= 0f || cost >= 0.999f)
+            return;
+
+        float x = mirrored
+            ? inner.xMax - inner.width * cost
+            : inner.x + inner.width * cost;
+
+        RetroGui.Fill(
+            new Rect(Mathf.Round(x) - 1f, inner.y, 1f, inner.height),
+            afforded ? new Color(1f, 1f, 1f, 0.85f) : new Color(0f, 0f, 0f, 0.55f));
+    }
+
+    /// <summary>Filling up: flat blue with a crest, and a bright leading lip.</summary>
+    private static void DrawChargingMana(Rect fill, bool mirrored)
+    {
+        if (fill.width <= 0f)
+            return;
+
+        RetroGui.Fill(fill, RetroPalette.ManaFill);
+        RetroGui.Fill(new Rect(fill.x, fill.y, fill.width, 2f), RetroPalette.ManaFillBright);
+
+        if (fill.width < 2f)
+            return;
+
+        Rect lip = mirrored
+            ? new Rect(fill.x, fill.y, 2f, fill.height)
+            : new Rect(fill.xMax - 2f, fill.y, 2f, fill.height);
+        RetroGui.Fill(lip, new Color(0.8f, 0.94f, 1f, 0.9f));
+    }
+
+    /// <summary>
+    /// Charged: a scrolling rainbow with a shine sweeping over it. IMGUI has no
+    /// gradients, so the rainbow is a handful of flat slices with a moving hue —
+    /// cheap, and it only ever runs while a spell is actually armed.
+    /// </summary>
+    private static void DrawChargedMana(Rect fill)
+    {
+        const int Slices = 14;
+        if (fill.width <= 0f)
+            return;
+
+        float sliceWidth = fill.width / Slices;
+        for (int i = 0; i < Slices; i++)
+        {
+            float hue = Mathf.Repeat(Time.unscaledTime * 0.45f + i / (float)Slices * 0.8f, 1f);
+            RetroGui.Fill(
+                new Rect(fill.x + sliceWidth * i, fill.y, sliceWidth + 1f, fill.height),
+                Color.HSVToRGB(hue, 0.72f, 1f));
+        }
+
+        float sweep = Mathf.Repeat(Time.unscaledTime * 0.7f, 1.4f) / 1.4f;
+        float shineWidth = Mathf.Min(6f, fill.width);
+        RetroGui.Fill(
+            new Rect(Mathf.Lerp(fill.x, fill.xMax - shineWidth, sweep), fill.y, shineWidth, fill.height),
+            new Color(1f, 1f, 1f, 0.4f));
+    }
+
+    /// <summary>
+    /// One of the character's two spells, banded across the top of their
+    /// portrait so what the mana bar is paying toward is always legible. It
+    /// takes the spell's own accent, dims while unaffordable, and pulses with
+    /// its cast key the moment the bar can pay for it.
+    /// </summary>
+    private static void DrawSpellPlate(
+        Rect rect,
+        MagicAbilityDefinition ability,
+        bool ready,
+        string castPrompt,
+        RetroTheme theme)
     {
         RetroGui.Fill(rect, new Color(0f, 0f, 0f, 0.72f));
+        if (ability == null)
+            return;
 
+        Color accent = ability.Accent;
         Color previous = GUI.color;
-        GUI.color = RetroPalette.Gold;
-        GUI.Label(rect, MagicAbilityInfo.DisplayName(ability), theme.ScoreTagCentered);
+
+        if (ready)
+        {
+            float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 7f);
+            accent = Color.Lerp(accent, Color.white, pulse);
+            RetroGui.Border(rect, accent, 1f);
+        }
+        else
+        {
+            accent = new Color(accent.r, accent.g, accent.b, 0.45f);
+        }
+
+        GUI.color = accent;
+        GUI.Label(rect, ability.DisplayName, theme.ScoreTagCentered);
+
+        // The key rides on the plate rather than the bar: with two spells, the
+        // bar cannot say which key does what.
+        if (!string.IsNullOrEmpty(castPrompt))
+        {
+            GUI.Label(
+                new Rect(rect.xMax - 14f, rect.y, 12f, rect.height),
+                castPrompt,
+                theme.ScoreTagCentered);
+        }
+
         GUI.color = previous;
     }
 
@@ -623,9 +871,14 @@ public static class BattleHudView
         if (!match.HasOutcome)
             return string.Empty;
 
-        return match.Mode == TetrisGameMode.Solo
-            ? "GAME OVER"
-            : $"{match.WinnerName} IS THE WINNER";
+        if (match.SoloRun == null)
+            return $"{match.WinnerName} IS THE WINNER";
+
+        // A finished sprint reports the clock — that is the whole score. Any
+        // other way a solo run ends is a top-out.
+        return match.SoloRun.IsComplete
+            ? $"{match.SoloRun.LineTarget} LINES IN {SoloRun.FormatTime(match.SoloRun.Elapsed)}"
+            : "GAME OVER";
     }
 
     private static void DrawResultBanner(MatchDirector match, RetroTheme theme)

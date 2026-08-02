@@ -206,6 +206,11 @@ public sealed class RetroTheme : IDisposable
             normal = { textColor = chipWhite }
         };
 
+        ChipValueLeft = new GUIStyle(ChipValue)
+        {
+            alignment = TextAnchor.MiddleLeft
+        };
+
         BoxHeader = new GUIStyle(GUI.skin.label)
         {
             alignment = TextAnchor.MiddleCenter,
@@ -271,6 +276,7 @@ public sealed class RetroTheme : IDisposable
     public GUIStyle ScoreTagCentered { get; }
     public GUIStyle ChipLabel { get; }
     public GUIStyle ChipValue { get; }
+    public GUIStyle ChipValueLeft { get; }
     public GUIStyle BoxHeader { get; }
     public GUIStyle NameRibbon { get; }
     public GUIStyle NameRibbonRight { get; }

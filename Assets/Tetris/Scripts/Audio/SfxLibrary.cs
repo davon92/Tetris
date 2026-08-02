@@ -19,6 +19,8 @@ public enum GameSfx
     SpellCast,
     SpellHit,
     Heal,
+    ManaCharged,
+    ManaFizzle,
     LevelUp,
     Ready,
     Start,
@@ -155,6 +157,28 @@ public static class SfxLibrary
                             ChiptuneSynth.Note(notes[i]), Wave.Triangle, 0.3f, Envelope.Pad, 6f, 4f);
                     }
                 });
+
+            case GameSfx.ManaCharged:
+                // The bar topping out: a shimmering chord that says "spend me"
+                // without stepping on the line-clear sound underneath it.
+                return Simple(0.8f, b =>
+                {
+                    int[] notes = { 76, 83, 88, 91 };
+                    for (int i = 0; i < notes.Length; i++)
+                    {
+                        ChiptuneSynth.AddTone(
+                            b, i * 0.07f, 0.45f,
+                            ChiptuneSynth.Note(notes[i]), Wave.Triangle, 0.28f, Envelope.Pad, 9f, 7f);
+                        ChiptuneSynth.AddTone(
+                            b, i * 0.07f, 0.45f,
+                            ChiptuneSynth.Note(notes[i] + 12), Wave.Pulse, 0.11f, Envelope.Pad);
+                    }
+                });
+
+            case GameSfx.ManaFizzle:
+                // Casting on an unfinished bar. Quiet and dull on purpose.
+                return Simple(0.14f, b =>
+                    ChiptuneSynth.AddTone(b, 0f, 0.12f, 260f, 150f, Wave.Pulse, 0.18f, Envelope.Short));
 
             case GameSfx.LevelUp:
                 return Simple(0.5f, b =>

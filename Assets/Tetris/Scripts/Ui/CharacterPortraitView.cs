@@ -25,7 +25,7 @@ public static class CharacterPortraitView
         PortraitMood mood,
         float reactionStrength)
     {
-        BattleCharacterDefinition character = BattleCharacterRoster.Get(characterIndex);
+        BattleCharacter character = BattleCharacterRoster.Get(characterIndex);
 
         // A hit knocks the portrait around; a cast lifts and swells it.
         Rect drawRect = rect;
@@ -57,7 +57,7 @@ public static class CharacterPortraitView
     }
 
     private static void DrawArt(
-        BattleCharacterDefinition character,
+        BattleCharacter character,
         int characterIndex,
         Rect rect,
         BattleArtLibrary art,

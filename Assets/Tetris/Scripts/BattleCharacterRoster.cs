@@ -1,78 +1,37 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
-public enum BattleCharacterPortrait
-{
-    Lyra,
-    Bram,
-    Locked
-}
-
-public readonly struct BattleCharacterDefinition
-{
-    public BattleCharacterDefinition(
-        string id,
-        string displayName,
-        string title,
-        BattleCharacterPortrait portrait,
-        Color accent,
-        bool unlockedByDefault,
-        MagicAbility ability)
-    {
-        Id = id;
-        DisplayName = displayName;
-        Title = title;
-        Portrait = portrait;
-        Accent = accent;
-        UnlockedByDefault = unlockedByDefault;
-        Ability = ability;
-    }
-
-    public string Id { get; }
-    public string DisplayName { get; }
-    public string Title { get; }
-    public BattleCharacterPortrait Portrait { get; }
-    public Color Accent { get; }
-    public bool UnlockedByDefault { get; }
-    public MagicAbility Ability { get; }
-}
-
+/// <summary>
+/// The roster the game reads. It prefers the authored
+/// <see cref="BattleCharacterLibrary"/> asset in Resources; with no asset it
+/// synthesizes the shipped fighters in memory, so a fresh clone still boots and
+/// a designer can bake the defaults to assets and start tuning from there.
+/// </summary>
 public static class BattleCharacterRoster
 {
     private const string UnlockKeyPrefix = "battle-character-unlocked-";
 
-    private static readonly BattleCharacterDefinition[] Characters =
-    {
-        new(
-            "lyra",
-            "LYRA",
-            "STAR-MAGE COURIER",
-            BattleCharacterPortrait.Lyra,
-            new Color(0.95f, 0.48f, 0.86f),
-            true,
-            MagicAbility.Starburst),
-        new(
-            "bram",
-            "BRAM",
-            "STORM-MAGE RIVAL",
-            BattleCharacterPortrait.Bram,
-            new Color(0.3f, 0.85f, 1f),
-            true,
-            MagicAbility.Lightning),
-        CreateLocked("hidden-01", MagicAbility.Heal),
-        CreateLocked("hidden-02", MagicAbility.Lightning),
-        CreateLocked("hidden-03", MagicAbility.Starburst),
-        CreateLocked("hidden-04", MagicAbility.Heal)
-    };
+    private static BattleCharacter[] characters;
 
-    public static int Count => Characters.Length;
+    public static int Count => Resolve().Length;
 
-    public static BattleCharacterDefinition Get(int index)
+    public static BattleCharacter Get(int index)
     {
-        if (index < 0 || index >= Characters.Length)
+        BattleCharacter[] roster = Resolve();
+        if (index < 0 || index >= roster.Length)
             throw new ArgumentOutOfRangeException(nameof(index));
 
-        return Characters[index];
+        return roster[index];
+    }
+
+    /// <summary>
+    /// Drops the cached roster so the next read picks the library up again.
+    /// The editor baker calls this after writing assets.
+    /// </summary>
+    public static void Invalidate()
+    {
+        characters = null;
     }
 
     public static int FindIndex(string characterId)
@@ -80,9 +39,10 @@ public static class BattleCharacterRoster
         if (string.IsNullOrWhiteSpace(characterId))
             return -1;
 
-        for (int i = 0; i < Characters.Length; i++)
+        BattleCharacter[] roster = Resolve();
+        for (int i = 0; i < roster.Length; i++)
         {
-            if (string.Equals(Characters[i].Id, characterId, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(roster[i].Id, characterId, StringComparison.OrdinalIgnoreCase))
                 return i;
         }
 
@@ -91,7 +51,7 @@ public static class BattleCharacterRoster
 
     public static bool IsUnlocked(int index)
     {
-        BattleCharacterDefinition character = Get(index);
+        BattleCharacter character = Get(index);
         return character.UnlockedByDefault ||
                PlayerPrefs.GetInt(UnlockKeyPrefix + character.Id, 0) == 1;
     }
@@ -102,21 +62,97 @@ public static class BattleCharacterRoster
         if (index < 0)
             return false;
 
-        BattleCharacterDefinition character = Characters[index];
-        PlayerPrefs.SetInt(UnlockKeyPrefix + character.Id, 1);
+        PlayerPrefs.SetInt(UnlockKeyPrefix + Get(index).Id, 1);
         PlayerPrefs.Save();
         return true;
     }
 
-    private static BattleCharacterDefinition CreateLocked(string id, MagicAbility ability)
+    private static BattleCharacter[] Resolve()
     {
-        return new BattleCharacterDefinition(
-            id,
-            "???",
-            "WIN ADVENTURES TO UNLOCK",
+        // A destroyed asset compares equal to null, so this also recovers from
+        // a domain reload that left the cache holding dead references.
+        if (characters != null && characters.Length > 0 && characters[0] != null)
+            return characters;
+
+        characters = LoadAuthored() ?? BuildDefaults();
+        return characters;
+    }
+
+    private static BattleCharacter[] LoadAuthored()
+    {
+        BattleCharacterLibrary library =
+            Resources.Load<BattleCharacterLibrary>(BattleCharacterLibrary.ResourceName);
+        if (library == null)
+            return null;
+
+        List<BattleCharacter> authored = new();
+        foreach (BattleCharacter character in library.Characters)
+        {
+            if (character != null)
+                authored.Add(character);
+        }
+
+        if (authored.Count == 0)
+        {
+            Debug.LogWarning(
+                $"{BattleCharacterLibrary.ResourceName} has no characters assigned; " +
+                "falling back to the built-in roster.");
+            return null;
+        }
+
+        return authored.ToArray();
+    }
+
+    /// <summary>
+    /// The shipped roster, built in memory. This is also what
+    /// <c>Tetris/Bake Default Battle Content</c> writes out as assets.
+    /// </summary>
+    public static BattleCharacter[] BuildDefaults()
+    {
+        MagicAbilityDefinition lightning =
+            MagicAbilityDefinition.CreateBuiltIn(BuiltInAbility.Lightning);
+        MagicAbilityDefinition starburst =
+            MagicAbilityDefinition.CreateBuiltIn(BuiltInAbility.Starburst);
+        MagicAbilityDefinition mending =
+            MagicAbilityDefinition.CreateBuiltIn(BuiltInAbility.MendingLight);
+
+        return new[]
+        {
+            BattleCharacter.Create(
+                "lyra", "LYRA", "STAR-MAGE COURIER",
+                BattleCharacterPortrait.Lyra,
+                new Color(0.95f, 0.48f, 0.86f),
+                unlockedByDefault: true,
+                startingGarbage: 0,
+                manaCapacity: 100,
+                starburst, mending),
+            BattleCharacter.Create(
+                "bram", "BRAM", "STORM-MAGE RIVAL",
+                BattleCharacterPortrait.Bram,
+                new Color(0.3f, 0.85f, 1f),
+                unlockedByDefault: true,
+                startingGarbage: 0,
+                manaCapacity: 100,
+                lightning, mending),
+            CreateLocked("hidden-01", lightning, mending),
+            CreateLocked("hidden-02", starburst, mending),
+            CreateLocked("hidden-03", lightning, mending),
+            CreateLocked("hidden-04", starburst, mending)
+        };
+    }
+
+    private static BattleCharacter CreateLocked(
+        string id,
+        MagicAbilityDefinition offensive,
+        MagicAbilityDefinition defensive)
+    {
+        return BattleCharacter.Create(
+            id, "???", "WIN ADVENTURES TO UNLOCK",
             BattleCharacterPortrait.Locked,
             new Color(0.56f, 0.48f, 0.78f),
-            false,
-            ability);
+            unlockedByDefault: false,
+            startingGarbage: 0,
+            manaCapacity: 100,
+            offensive, defensive);
     }
 }

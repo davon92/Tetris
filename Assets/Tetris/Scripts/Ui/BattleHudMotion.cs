@@ -84,9 +84,17 @@ public sealed class BattleHudMotion
     /// <summary>Upcoming pieces for the NEXT queue, nearest first. Never null.</summary>
     public TetriminoType[] Upcoming { get; private set; } = Array.Empty<TetriminoType>();
 
+    /// <summary>The solo clock as "M:SS.hh". Empty when no solo run is live.</summary>
+    public string ClockText { get; private set; } = string.Empty;
+
+    /// <summary>Sprint progress as "12/40". Empty unless the run is a race.</summary>
+    public string GoalText { get; private set; } = string.Empty;
+
     private TetrisGameSession upcomingSourceOne;
     private TetrisGameSession upcomingSourceTwo;
     private int upcomingSerialKey = int.MinValue;
+    private int clockHundredths = -1;
+    private int goalLines = -1;
 
     public void Reset()
     {
@@ -98,15 +106,56 @@ public sealed class BattleHudMotion
         upcomingSourceOne = null;
         upcomingSourceTwo = null;
         upcomingSerialKey = int.MinValue;
+        ClockText = string.Empty;
+        GoalText = string.Empty;
+        clockHundredths = -1;
+        goalLines = -1;
     }
 
-    public void Tick(TetrisGameSession one, TetrisGameSession two, float deltaTime)
+    public void Tick(TetrisGameSession one, TetrisGameSession two, SoloRun solo, float deltaTime)
     {
         TickSeat(PlayerOne, one, deltaTime);
         TickSeat(PlayerTwo, two, deltaTime);
         PlayerOneVitals.Tick(one, deltaTime);
         PlayerTwoVitals.Tick(two, deltaTime);
         RefreshUpcoming(one, two);
+        RefreshSoloReadouts(solo);
+    }
+
+    /// <summary>
+    /// Rebuilds the clock and goal strings only when the digits they show
+    /// actually change, so a HUD that draws them every repaint — and keeps
+    /// drawing them through the frozen result beat — allocates nothing.
+    /// </summary>
+    private void RefreshSoloReadouts(SoloRun solo)
+    {
+        if (solo == null)
+        {
+            ClockText = string.Empty;
+            GoalText = string.Empty;
+            clockHundredths = -1;
+            goalLines = -1;
+            return;
+        }
+
+        int hundredths = Mathf.Max(0, Mathf.FloorToInt(solo.Elapsed * 100f));
+        if (hundredths != clockHundredths)
+        {
+            clockHundredths = hundredths;
+            ClockText = SoloRun.FormatTime(solo.Elapsed);
+        }
+
+        if (!solo.IsRace)
+        {
+            GoalText = string.Empty;
+            return;
+        }
+
+        if (solo.Lines != goalLines)
+        {
+            goalLines = solo.Lines;
+            GoalText = $"{solo.Lines}/{solo.LineTarget}";
+        }
     }
 
     /// <summary>
