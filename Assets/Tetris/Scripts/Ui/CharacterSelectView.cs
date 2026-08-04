@@ -43,11 +43,16 @@ public static class CharacterSelectView
             new Rect(70f, 116f, 500f, 26f),
             BuildHeading(model),
             theme.MenuHeading);
-        GUI.Label(new Rect(46f, 143f, 250f, 20f), BuildLeftStatus(model), theme.CharacterTitle);
-        GUI.Label(
+        // Seat-tinted, and on the side of the screen that seat will play from,
+        // so the orange/indigo pairing is already learned by the time the
+        // battle HUD uses it.
+        DrawSeatStatus(
+            new Rect(46f, 143f, 250f, 20f), BuildLeftStatus(model), RetroPalette.SeatOne, theme);
+        DrawSeatStatus(
             new Rect(344f, 143f, 250f, 20f),
             BuildRightStatus(model, difficulty),
-            theme.CharacterTitle);
+            RetroPalette.SeatTwo,
+            theme);
 
         CharacterSelectClick click = CharacterSelectClick.None;
         for (int i = 0; i < BattleCharacterRoster.Count; i++)
@@ -71,6 +76,14 @@ public static class CharacterSelectView
 
         MenuChromeView.DrawFooter(theme, MenuChromeView.RosterHint);
         return click;
+    }
+
+    private static void DrawSeatStatus(Rect rect, string text, Color seat, RetroTheme theme)
+    {
+        Color previous = GUI.color;
+        GUI.color = seat;
+        GUI.Label(rect, text, theme.SeatHelp);
+        GUI.color = previous;
     }
 
     private static void DrawInfoPanel(CharacterSelectModel model, RetroTheme theme)
@@ -137,9 +150,9 @@ public static class CharacterSelectView
 
         if (chosenByPlayerOne)
         {
-            Rect badge = new Rect(cardRect.x + 3f, cardRect.y + 3f, 25f, 16f);
-            RetroGui.Fill(badge, RetroPalette.PlayerOneBadge);
-            GUI.Label(badge, "P1", theme.MenuFooter);
+            Rect badge = new Rect(cardRect.x + 3f, cardRect.y + 3f, 30f, 18f);
+            RetroGui.Fill(badge, RetroPalette.SeatOne);
+            GUI.Label(badge, "P1", theme.SeatTag);
         }
 
         return GUI.Button(cardRect, GUIContent.none, GUIStyle.none);

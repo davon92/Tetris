@@ -5,40 +5,50 @@ using UnityEngine;
 /// It reads match state and never mutates it; per-frame presentation motion
 /// (score count-up, punches, flashes) lives in <see cref="BattleHudMotion"/>.
 ///
-/// Layout ("RUSH PLATE"): each player's identity runs as an accent-colored
-/// spine down their side gutter (name ribbon, hold box, garbage badge, stat
-/// chips, portrait, nameplate), the shared NEXT queue sits in the center
+/// Layout ("RUSH PLATE"): the character a player picked runs as an accent-
+/// colored spine down their side gutter (hold box, garbage badge, stat chips,
+/// portrait, health bar, nameplate), the shared NEXT queue sits in the center
 /// gutter — both players fight over the same pieces, so it belongs to neither —
-/// and the score is a chunky plate directly beneath each board.
+/// and a chunky seat plate carrying the seat banner and score sits directly
+/// beneath each board.
+///
+/// Seat identity (PLAYER 1 / PLAYER 2 / CPU) is drawn in seat colours rather
+/// than character accents: two players can pick the same character, and when
+/// they do the accents stop telling the sides apart. The seat reads five ways —
+/// an edge spine, the ribbon chip, a frame around the playfield, the banner on
+/// the plate under it, and that seat's own key list — plus a full-width callout
+/// over each board during READY/START, when a player is first hunting for their
+/// side.
 /// </summary>
 public static class BattleHudView
 {
+    private const string CpuKeys = "COMPUTER CONTROLLED";
+
     /// <summary>
     /// Built from the live bindings rather than written out, so a rebind in the
     /// options screen is reflected here instead of quietly lying to the player.
     /// </summary>
-    private static string BuildHelp(bool versus)
+    private static string BuildSeatKeys(PlayerInputBindings seat)
     {
-        PlayerInputBindings one = PlayerInputProfiles.One;
-        string seatOne =
-            $"{one.KeyLabel(GameAction.MoveLeft)}/{one.KeyLabel(GameAction.MoveRight)} • " +
-            $"{one.KeyLabel(GameAction.SoftDrop)} • " +
-            $"{one.KeyLabel(GameAction.RotateClockwise)}/{one.KeyLabel(GameAction.RotateCounterClockwise)} • " +
-            $"{one.KeyLabel(GameAction.HardDrop)} • {one.KeyLabel(GameAction.Hold)} • " +
-            $"{one.KeyLabel(GameAction.CastOffensive)}/{one.KeyLabel(GameAction.CastDefensive)}";
+        return
+            $"{seat.KeyLabel(GameAction.MoveLeft)}/{seat.KeyLabel(GameAction.MoveRight)} • " +
+            $"{seat.KeyLabel(GameAction.SoftDrop)} • " +
+            $"{seat.KeyLabel(GameAction.RotateClockwise)}/{seat.KeyLabel(GameAction.RotateCounterClockwise)} • " +
+            $"{seat.KeyLabel(GameAction.HardDrop)} • {seat.KeyLabel(GameAction.Hold)} • " +
+            $"{seat.KeyLabel(GameAction.CastOffensive)}/{seat.KeyLabel(GameAction.CastDefensive)}";
+    }
 
-        if (!versus)
-            return $"P1  {seatOne}      ESC MENU";
-
-        PlayerInputBindings two = PlayerInputProfiles.Two;
-        string seatTwo =
-            $"{two.KeyLabel(GameAction.MoveLeft)}/{two.KeyLabel(GameAction.MoveRight)} • " +
-            $"{two.KeyLabel(GameAction.SoftDrop)} • " +
-            $"{two.KeyLabel(GameAction.RotateClockwise)}/{two.KeyLabel(GameAction.RotateCounterClockwise)} • " +
-            $"{two.KeyLabel(GameAction.HardDrop)} • {two.KeyLabel(GameAction.Hold)} • " +
-            $"{two.KeyLabel(GameAction.CastOffensive)}/{two.KeyLabel(GameAction.CastDefensive)}";
-
-        return $"P1  {seatOne}      P2  {seatTwo}      ESC MENU";
+    /// <summary>
+    /// Just the keys that steer a piece. The READY callout is one board wide
+    /// and is answering "which board is mine, and how do I move it" — hold and
+    /// the two spells can wait for the help row, which has the width for them.
+    /// </summary>
+    private static string BuildSeatMoveKeys(PlayerInputBindings seat)
+    {
+        return
+            $"{seat.KeyLabel(GameAction.MoveLeft)}/{seat.KeyLabel(GameAction.MoveRight)} • " +
+            $"{seat.KeyLabel(GameAction.RotateClockwise)}/{seat.KeyLabel(GameAction.RotateCounterClockwise)} • " +
+            $"{seat.KeyLabel(GameAction.HardDrop)}";
     }
 
     // Versus geometry: boards at (128,80,160,320) and (352,80,160,320); the
@@ -49,6 +59,15 @@ public static class BattleHudView
 
     private static readonly Rect LeftPortrait = new Rect(8f, 177f, 108f, 170f);
     private static readonly Rect RightPortrait = new Rect(524f, 177f, 108f, 170f);
+
+    // The seat frame hugs the playfield 3px out, and the seat plate picks up
+    // exactly where the frame stops, so frame and plate read as one bracket
+    // wrapped around the board.
+    private const float SeatFrameInset = 3f;
+    private const float SeatPlateTop = 402f;
+    private const float SeatPlateHeight = 56f;
+    private const float SeatBannerHeight = 18f;
+    private const float HelpRowTop = 460f;
 
     public const int NoClick = -1;
 
@@ -79,13 +98,60 @@ public static class BattleHudView
         if (resultSelection >= 0)
             clicked = DrawResultModal(match, resultSelection, theme);
 
-        GUI.Label(
-            new Rect(12f, 460f, 616f, 16f),
-            BuildHelp(match.Mode == TetrisGameMode.LocalVersus),
-            theme.Help);
+        DrawHelpRow(match, versus, theme);
 
         DrawIntroOverlay(match, theme);
         return clicked;
+    }
+
+    /// <summary>
+    /// In versus the row is split per seat and tinted, P1's keys growing right
+    /// from the left edge and P2's growing left from the right, so each half is
+    /// bound to a side by colour and direction. The full rebindable list is far
+    /// wider than one 166px board column, which is why this keeps the canvas
+    /// width rather than sitting under the boards like the seat plates do.
+    /// </summary>
+    private static void DrawHelpRow(MatchDirector match, bool versus, RetroTheme theme)
+    {
+        if (!versus)
+        {
+            GUI.Label(
+                new Rect(12f, HelpRowTop, 616f, 16f),
+                $"P1  {BuildSeatKeys(PlayerInputProfiles.One)}      ESC MENU",
+                theme.Help);
+            return;
+        }
+
+        bool cpu = match.Mode == TetrisGameMode.VersusCpu;
+        DrawSeatHelp(
+            new Rect(12f, HelpRowTop, 275f, 16f),
+            BuildSeatKeys(PlayerInputProfiles.One),
+            RetroPalette.SeatOne,
+            theme.SeatHelpLeft);
+        GUI.Label(new Rect(292f, HelpRowTop, 56f, 16f), "ESC MENU", theme.Help);
+        DrawSeatHelp(
+            new Rect(353f, HelpRowTop, 275f, 16f),
+            cpu ? CpuKeys : BuildSeatKeys(PlayerInputProfiles.Two),
+            RetroPalette.SeatTwo,
+            theme.SeatHelpRight);
+    }
+
+    private static void DrawSeatHelp(Rect rect, string text, Color seat, GUIStyle style)
+    {
+        Color previous = GUI.color;
+        GUI.color = seat;
+        GUI.Label(rect, text, style);
+        GUI.color = previous;
+    }
+
+    /// <summary>The seat's full-width column: the board plus its frame inset.</summary>
+    private static Rect SeatColumn(Rect board, float y, float height)
+    {
+        return new Rect(
+            board.x - SeatFrameInset,
+            y,
+            board.width + SeatFrameInset * 2f,
+            height);
     }
 
     /// <summary>Post-match choice: rematch/retry or back to the title menu.</summary>
@@ -151,18 +217,27 @@ public static class BattleHudView
     {
         BattleCharacter left = BattleCharacterRoster.Get(match.PlayerOneCharacter);
         BattleCharacter right = BattleCharacterRoster.Get(match.PlayerTwoCharacter);
+        bool cpu = match.Mode == TetrisGameMode.VersusCpu;
+
+        // Seat chrome first: it frames everything else on that side.
+        RetroGui.Fill(new Rect(0f, 0f, 5f, RetroGui.CanvasHeight), RetroPalette.SeatOne);
+        RetroGui.Fill(
+            new Rect(RetroGui.CanvasWidth - 5f, 0f, 5f, RetroGui.CanvasHeight),
+            RetroPalette.SeatTwo);
+        DrawSeatFrame(LeftBoard, RetroPalette.SeatOne);
+        DrawSeatFrame(RightBoard, RetroPalette.SeatTwo);
 
         DrawNameRibbon(
-            new Rect(4f, 6f, 168f, 28f), match.PlayerOne.DisplayName, "1P",
-            RetroPalette.PlayerOneBadge, left.Accent, false, theme,
+            new Rect(4f, 6f, 168f, 28f), match.PlayerOne.DisplayName, "P1",
+            RetroPalette.SeatOne, false, theme,
             match.PlayerOneCallout, match.PlayerOneCalloutAge);
         DrawNameRibbon(
             new Rect(468f, 6f, 168f, 28f), match.PlayerTwo.DisplayName,
-            match.Mode == TetrisGameMode.VersusCpu ? "CPU" : "2P",
-            RetroPalette.NameplateBram, right.Accent, true, theme,
+            cpu ? "CPU" : "P2",
+            RetroPalette.SeatTwo, true, theme,
             match.PlayerTwoCallout, match.PlayerTwoCalloutAge);
 
-        if (match.Mode == TetrisGameMode.VersusCpu)
+        if (cpu)
         {
             GUI.Label(
                 new Rect(538f, 36f, 98f, 10f),
@@ -234,10 +309,10 @@ public static class BattleHudView
             DrawOutcomeBadge(new Rect(524f, 375f, 108f, 23f), !match.PlayerOneWon, match, theme);
         }
 
-        DrawScorePlate(new Rect(128f, 404f, 160f, 40f), match.PlayerOne,
-            motion.PlayerOne, left.Accent, theme);
-        DrawScorePlate(new Rect(352f, 404f, 160f, 40f), match.PlayerTwo,
-            motion.PlayerTwo, right.Accent, theme);
+        DrawSeatPlate(SeatPlateRect(LeftBoard), "PLAYER 1", RetroPalette.SeatOne,
+            match.PlayerOne, motion.PlayerOne, theme);
+        DrawSeatPlate(SeatPlateRect(RightBoard), cpu ? "CPU" : "PLAYER 2", RetroPalette.SeatTwo,
+            match.PlayerTwo, motion.PlayerTwo, theme);
 
         DrawBattleBlinker(match, theme);
 
@@ -254,9 +329,11 @@ public static class BattleHudView
         TetrisGameSession player = match.PlayerOne;
         bool racing = match.SoloRun != null && match.SoloRun.IsRace;
 
+        DrawSeatFrame(SoloBoard, RetroPalette.SeatOne);
+
         DrawNameRibbon(
-            new Rect(4f, 6f, 168f, 28f), player.DisplayName, "1P",
-            RetroPalette.PlayerOneBadge, RetroPalette.Gold, false, theme,
+            new Rect(4f, 6f, 168f, 28f), player.DisplayName, "P1",
+            RetroPalette.SeatOne, false, theme,
             match.PlayerOneCallout, match.PlayerOneCalloutAge);
 
         DrawHoldBox(new Rect(160f, 80f, 72f, 56f), player, motion.PlayerOne, theme);
@@ -295,8 +372,8 @@ public static class BattleHudView
         if (racing)
             DrawClockPlate(new Rect(160f, 285f, 72f, 38f), match, motion, theme);
 
-        DrawScorePlate(new Rect(240f, 404f, 160f, 40f), player,
-            motion.PlayerOne, RetroPalette.Gold, theme);
+        DrawSeatPlate(SeatPlateRect(SoloBoard), "PLAYER 1", RetroPalette.SeatOne,
+            player, motion.PlayerOne, theme);
 
         DrawToast(SoloBoard, match.PlayerOneCallout, match.PlayerOneCalloutAge,
             match.PlayerOneCalloutTimeLeft, false, theme);
@@ -334,33 +411,39 @@ public static class BattleHudView
 
     // ------------------------------------------------------------- elements
 
+    /// <summary>
+    /// Character name plus the seat chip that owns it. The ribbon is bordered
+    /// in the seat colour, not the character accent, so a mirror match still
+    /// reads as two different sides.
+    /// </summary>
     private static void DrawNameRibbon(
         Rect rect,
         string name,
         string seatLabel,
-        Color seatFill,
-        Color accent,
+        Color seat,
         bool rightAligned,
         RetroTheme theme,
         BattleCallout? callout,
         float calloutAge)
     {
         // A fresh SENT toast flashes the whole ribbon white for a beat.
-        Color border = accent;
+        Color border = seat;
         if (callout.HasValue && callout.Value.Kind == BattleCalloutKind.Sent && calloutAge < 0.15f)
             border = Color.white;
 
         RetroGui.Panel(rect, RetroPalette.PanelFillDeep, border, 2f);
 
-        Rect seat = rightAligned
-            ? new Rect(rect.xMax - 26f, rect.y, 26f, rect.height)
-            : new Rect(rect.x, rect.y, 26f, rect.height);
-        RetroGui.Fill(seat, seatFill);
-        GUI.Label(seat, seatLabel, theme.SeatTag);
+        const float chipWidth = 40f;
+        Rect chip = rightAligned
+            ? new Rect(rect.xMax - chipWidth - 2f, rect.y + 2f, chipWidth, rect.height - 4f)
+            : new Rect(rect.x + 2f, rect.y + 2f, chipWidth, rect.height - 4f);
+        RetroGui.Fill(chip, seat);
+        GUI.Label(chip, seatLabel, theme.SeatTag);
 
+        float textInset = chipWidth + 8f;
         Rect nameRect = rightAligned
-            ? new Rect(rect.x + 2f, rect.y, rect.width - 34f, rect.height)
-            : new Rect(rect.x + 32f, rect.y, rect.width - 34f, rect.height);
+            ? new Rect(rect.x + 6f, rect.y, rect.width - textInset - 6f, rect.height)
+            : new Rect(rect.x + textInset, rect.y, rect.width - textInset - 6f, rect.height);
         GUI.Label(nameRect, name, rightAligned ? theme.NameRibbonRight : theme.NameRibbon);
     }
 
@@ -777,22 +860,54 @@ public static class BattleHudView
             isWinner ? theme.MatchWinner : theme.MatchLoser);
     }
 
-    /// <summary>The hero element: a chunky score plate directly under the board.</summary>
-    private static void DrawScorePlate(
+    /// <summary>
+    /// A seat-coloured bracket around the playfield. Nothing else on screen is
+    /// this close to the cells a player is watching, so it is the cue that
+    /// survives once their eyes never leave the board.
+    /// </summary>
+    private static void DrawSeatFrame(Rect board, Color seat)
+    {
+        // Runs from just above the playfield down to the plate top, so the
+        // frame's bottom edge and the plate's top edge stack into one line.
+        float top = board.y - SeatFrameInset;
+        Rect frame = SeatColumn(board, top, SeatPlateTop - top);
+        RetroGui.Border(frame, new Color(seat.r, seat.g, seat.b, 0.85f), 2f);
+    }
+
+    /// <summary>Where a board's seat plate sits: flush under its seat frame.</summary>
+    private static Rect SeatPlateRect(Rect board)
+    {
+        return SeatColumn(board, SeatPlateTop, SeatPlateHeight);
+    }
+
+    /// <summary>
+    /// The hero element: one plate under each board carrying the seat banner
+    /// (PLAYER 1 / PLAYER 2 / CPU) above that seat's score, so "whose board is
+    /// this" and "how am I doing" land in the same glance.
+    /// </summary>
+    private static void DrawSeatPlate(
         Rect rect,
+        string seatLabel,
+        Color seatColor,
         TetrisGameSession session,
         BattleHudMotion.Seat seat,
-        Color accent,
         RetroTheme theme)
     {
         bool punching = seat.Punch > 0f;
         Rect drawRect = punching
             ? new Rect(rect.x - 2f, rect.y - 2f, rect.width + 4f, rect.height + 4f)
             : rect;
-        Color border = punching ? RetroPalette.EmberOrange : accent;
 
-        RetroGui.Panel(drawRect, RetroPalette.ScorePlateFill, border, 2f);
-        GUI.Label(new Rect(drawRect.x + 6f, drawRect.y + 2f, 60f, 10f), "SCORE", theme.ScoreTag);
+        RetroGui.Fill(drawRect, RetroPalette.ScorePlateFill);
+        // The punch grows the plate but never the banner: the one label a lost
+        // player is looking for must not move.
+        RetroGui.Border(drawRect, punching ? Color.white : seatColor, 2f);
+
+        Rect banner = new Rect(rect.x, rect.y, rect.width, SeatBannerHeight);
+        RetroGui.Fill(banner, seatColor);
+        GUI.Label(banner, seatLabel, theme.SeatBanner);
+
+        GUI.Label(new Rect(rect.x + 6f, banner.yMax + 2f, 60f, 10f), "SCORE", theme.ScoreTag);
 
         // Fixed-width digits so the count-up never makes the number jitter.
         bool ticking = seat.RoundedScore != session.Score;
@@ -800,7 +915,7 @@ public static class BattleHudView
         if (ticking || punching)
             GUI.color = RetroPalette.GoldBright;
         GUI.Label(
-            new Rect(drawRect.x + 6f, drawRect.y + 14f, drawRect.width - 12f, 24f),
+            new Rect(rect.x + 6f, banner.yMax + 12f, rect.width - 12f, 24f),
             seat.ScoreText,
             theme.ScoreValue);
         GUI.color = previous;
@@ -808,7 +923,9 @@ public static class BattleHudView
 
     private static void DrawBattleBlinker(MatchDirector match, RetroTheme theme)
     {
-        Rect rect = new Rect(296f, 404f, 48f, 24f);
+        // Sits on the seat banner row so the bottom band reads
+        // PLAYER 1 | BATTLE | PLAYER 2 straight across.
+        Rect rect = new Rect(296f, SeatPlateTop, 48f, SeatBannerHeight);
         Color border = RetroPalette.GoldText;
         border.a = 0.6f;
         RetroGui.Panel(rect, RetroPalette.PanelFillDeep, border);
@@ -902,6 +1019,26 @@ public static class BattleHudView
 
         RetroGui.Fill(RetroGui.CanvasRect, RetroPalette.OverlayScrim);
 
+        // Name each side over its own board before the first piece drops. This
+        // is the beat where a player decides which half of the screen is theirs,
+        // and the scrim means nothing else is competing for the look.
+        if (match.PlayerTwo != null)
+        {
+            bool cpu = match.Mode == TetrisGameMode.VersusCpu;
+            DrawSeatCallout(
+                LeftBoard,
+                "PLAYER 1",
+                BuildSeatMoveKeys(PlayerInputProfiles.One),
+                RetroPalette.SeatOne,
+                theme);
+            DrawSeatCallout(
+                RightBoard,
+                cpu ? "CPU" : "PLAYER 2",
+                cpu ? CpuKeys : BuildSeatMoveKeys(PlayerInputProfiles.Two),
+                RetroPalette.SeatTwo,
+                theme);
+        }
+
         bool isReady = match.Phase == MatchPhase.Ready;
         Color accent = isReady ? RetroPalette.ReadyAccent : RetroPalette.StartAccent;
         float pulse = 0.72f + Mathf.Sin(Time.unscaledTime * 8f) * 0.18f;
@@ -919,6 +1056,30 @@ public static class BattleHudView
             new Rect(panel.x + 18f, panel.y + 83f, panel.width - 36f, 25f),
             BuildMatchupLabel(match),
             theme.MatchRole);
+    }
+
+    /// <summary>
+    /// "This board is yours, and these are your keys" — parked high enough on
+    /// the board to clear the READY/START panel below it.
+    /// </summary>
+    private static void DrawSeatCallout(
+        Rect board,
+        string seatLabel,
+        string keys,
+        Color seat,
+        RetroTheme theme)
+    {
+        Rect panel = SeatColumn(board, 92f, 58f);
+        RetroGui.Fill(panel, RetroPalette.OverlayPanel);
+        RetroGui.Border(panel, seat, 3f);
+        RetroGui.Fill(new Rect(panel.x + 6f, panel.y + 6f, panel.width - 12f, 2f), seat);
+
+        Color previous = GUI.color;
+        GUI.color = seat;
+        GUI.Label(new Rect(panel.x, panel.y + 12f, panel.width, 24f), seatLabel, theme.SeatCallout);
+        GUI.color = previous;
+
+        GUI.Label(new Rect(panel.x + 4f, panel.y + 36f, panel.width - 8f, 16f), keys, theme.Help);
     }
 
     private static string BuildMatchupLabel(MatchDirector match)

@@ -232,12 +232,46 @@ public sealed class RetroTheme : IDisposable
             alignment = TextAnchor.MiddleRight
         };
 
+        // Seat labels print dark on a solid seat colour, so they read as a
+        // stamped chip rather than as another line of HUD text.
         SeatTag = new GUIStyle(GUI.skin.label)
         {
             alignment = TextAnchor.MiddleCenter,
-            fontSize = 9,
+            fontSize = 11,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = RetroPalette.SeatInk }
+        };
+
+        SeatBanner = new GUIStyle(SeatTag)
+        {
+            fontSize = 13
+        };
+
+        SeatCallout = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 20,
             fontStyle = FontStyle.Bold,
             normal = { textColor = Color.white }
+        };
+
+        // White so callers can tint it to the seat colour with GUI.color. The
+        // battle help row runs each seat's keys outward from its own edge, so
+        // it needs the left/right variants as well.
+        SeatHelp = new GUIStyle(Help)
+        {
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = Color.white }
+        };
+
+        SeatHelpLeft = new GUIStyle(SeatHelp)
+        {
+            alignment = TextAnchor.MiddleLeft
+        };
+
+        SeatHelpRight = new GUIStyle(SeatHelp)
+        {
+            alignment = TextAnchor.MiddleRight
         };
 
         ToastText = new GUIStyle(GUI.skin.label)
@@ -281,6 +315,11 @@ public sealed class RetroTheme : IDisposable
     public GUIStyle NameRibbon { get; }
     public GUIStyle NameRibbonRight { get; }
     public GUIStyle SeatTag { get; }
+    public GUIStyle SeatBanner { get; }
+    public GUIStyle SeatCallout { get; }
+    public GUIStyle SeatHelp { get; }
+    public GUIStyle SeatHelpLeft { get; }
+    public GUIStyle SeatHelpRight { get; }
     public GUIStyle ToastText { get; }
 
     /// <summary>

@@ -42,7 +42,17 @@ public static class RetroPalette
     public static readonly Color CardNameplate = new Color(0.015f, 0.025f, 0.075f, 0.98f);
     public static readonly Color LockedBorder = new Color(0.32f, 0.29f, 0.44f);
     public static readonly Color LockedAccent = new Color(0.48f, 0.42f, 0.64f);
-    public static readonly Color PlayerOneBadge = new Color(0.45f, 0.08f, 0.42f, 0.95f);
+
+    // Seat identity — which side of the screen you are sitting on. Kept
+    // separate from the character accents on purpose: both players can pick
+    // the same character, and when they do the accents stop telling the sides
+    // apart. Orange is always the left seat, indigo always the right one, from
+    // character select through to the battle HUD.
+    public static readonly Color SeatOne = new Color(1f, 0.5f, 0.14f, 1f);
+    public static readonly Color SeatTwo = new Color(0.45f, 0.56f, 1f, 1f);
+
+    /// <summary>Text colour for labels printed on a solid seat colour.</summary>
+    public static readonly Color SeatInk = new Color(0.05f, 0.04f, 0.1f, 1f);
 
     public static readonly Color PortraitBackdrop = new Color(0.025f, 0.035f, 0.08f, 0.95f);
     public static readonly Color PortraitFallback = new Color(0.015f, 0.018f, 0.04f);
@@ -61,5 +71,4 @@ public static class RetroPalette
     public static readonly Color ScorePlateFill = new Color(0.05f, 0.032f, 0.11f, 0.96f);
     public static readonly Color ChipFill = new Color(0.03f, 0.05f, 0.13f, 0.92f);
     public static readonly Color DangerFlash = new Color(1f, 0.32f, 0.38f, 0.9f);
-    public static readonly Color EmberOrange = new Color(1f, 0.47f, 0.16f, 1f);
 }
