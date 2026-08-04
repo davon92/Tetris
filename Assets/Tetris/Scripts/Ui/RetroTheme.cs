@@ -281,6 +281,44 @@ public sealed class RetroTheme : IDisposable
             fontStyle = FontStyle.Bold,
             normal = { textColor = Color.white }
         };
+
+        SlotIndex = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 13,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = RetroPalette.GoldText }
+        };
+
+        SlotTitle = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleLeft,
+            fontSize = 11,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = new Color(0.93f, 0.96f, 1f) }
+        };
+
+        SlotDetail = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.UpperLeft,
+            fontSize = 9,
+            normal = { textColor = new Color(0.62f, 0.72f, 0.84f) }
+        };
+
+        SlotMeta = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleRight,
+            fontSize = 9,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = RetroPalette.BorderCyan }
+        };
+
+        Notice = new GUIStyle(Help)
+        {
+            fontSize = 11,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = RetroPalette.GoldText }
+        };
     }
 
     public Texture2D PanelBackground { get; }
@@ -321,6 +359,13 @@ public sealed class RetroTheme : IDisposable
     public GUIStyle SeatHelpLeft { get; }
     public GUIStyle SeatHelpRight { get; }
     public GUIStyle ToastText { get; }
+    public GUIStyle SlotIndex { get; }
+    public GUIStyle SlotTitle { get; }
+    public GUIStyle SlotDetail { get; }
+    public GUIStyle SlotMeta { get; }
+
+    /// <summary>Centred one-line feedback such as "SAVED TO SLOT 03".</summary>
+    public GUIStyle Notice { get; }
 
     /// <summary>
     /// Draws a menu button, optionally at a one-off font size. Callers no

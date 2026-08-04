@@ -23,6 +23,7 @@ public static class StoryView
             RetroPalette.LocationFill,
             RetroPalette.Gold);
         GUI.Label(new Rect(172f, 13f, 296f, 28f), story.Script.LocationTitle, theme.StoryLocation);
+        GUI.Label(new Rect(468f, 15f, 160f, 24f), "ESC / START  •  MENU", theme.StoryPrompt);
 
         StoryLine line = story.CurrentLine;
 

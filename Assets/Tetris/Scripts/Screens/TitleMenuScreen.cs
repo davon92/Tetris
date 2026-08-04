@@ -63,6 +63,9 @@ public sealed class TitleMenuScreen : IGameScreen
             case MainMenuIntent.StartStory:
                 flow.BeginStory();
                 break;
+            case MainMenuIntent.OpenLoadGame:
+                flow.ShowLoadGame();
+                break;
             case MainMenuIntent.StartSolo:
                 flow.BeginMatch(command.Mode);
                 break;

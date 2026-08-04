@@ -29,6 +29,8 @@ public sealed class PrologueStoryScript : IStoryScript
         "WE COULD SOLVE IT TOGETHER."
     };
 
+    public string ChapterId => "prologue-moon-gate";
+
     public string BattleId => "chapter1_opening";
 
     public string LocationTitle => "PROLOGUE  •  THE MOON GATE";

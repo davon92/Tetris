@@ -27,6 +27,7 @@ public sealed class StoryDirector
 {
     private readonly IStoryScript script;
     private int lineIndex;
+    private float playtimeSeconds;
 
     public StoryDirector(IStoryScript script)
     {
@@ -36,6 +37,12 @@ public sealed class StoryDirector
     public IStoryScript Script => script;
 
     public StoryBeat Beat { get; private set; } = StoryBeat.None;
+
+    /// <summary>
+    /// Seconds spent inside this chapter, battles included and pauses
+    /// excluded. Written into save slots and shown on the pause menu.
+    /// </summary>
+    public float PlaytimeSeconds => playtimeSeconds;
 
     /// <summary>True from <see cref="Begin"/> until <see cref="Cancel"/>, battle included.</summary>
     public bool IsRunning { get; private set; }
@@ -79,6 +86,7 @@ public sealed class StoryDirector
         lineIndex = 0;
         Selection = 0;
         Response = 0;
+        playtimeSeconds = 0f;
         Beat = StoryBeat.Opening;
     }
 
@@ -89,6 +97,57 @@ public sealed class StoryDirector
         lineIndex = 0;
         Selection = 0;
         Response = 0;
+        playtimeSeconds = 0f;
+    }
+
+    /// <summary>Accrues chapter playtime. Ignored while the chapter is idle.</summary>
+    public void AddPlaytime(float seconds)
+    {
+        if (IsRunning && seconds > 0f)
+            playtimeSeconds += seconds;
+    }
+
+    /// <summary>
+    /// Snapshots the chapter for a save slot. A capture taken while a battle
+    /// owns the screen is stored as the challenge beat, so loading it drops the
+    /// player back at the line that started the fight rather than nowhere.
+    /// </summary>
+    public StoryProgress Capture()
+    {
+        return new StoryProgress(
+            script.ChapterId,
+            Beat == StoryBeat.None ? StoryBeat.Challenge : Beat,
+            lineIndex,
+            Response,
+            Selection,
+            BattleWon,
+            playtimeSeconds);
+    }
+
+    /// <summary>True when this director owns the chapter the progress came from.</summary>
+    public bool CanRestore(in StoryProgress progress)
+    {
+        return string.Equals(progress.ChapterId, script.ChapterId, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Puts the chapter back at a saved beat. Every index is clamped against
+    /// the current script so an older save can never index past authored
+    /// content after the chapter is edited.
+    /// </summary>
+    public bool Restore(in StoryProgress progress)
+    {
+        if (!CanRestore(progress))
+            return false;
+
+        IsRunning = true;
+        Beat = progress.Beat == StoryBeat.None ? StoryBeat.Opening : progress.Beat;
+        lineIndex = Mathf.Clamp(progress.LineIndex, 0, Mathf.Max(0, script.OpeningLines.Count - 1));
+        Response = Mathf.Clamp(progress.Response, 0, Mathf.Max(0, script.ChoiceLabels.Count - 1));
+        Selection = Mathf.Clamp(progress.Selection, 0, 1);
+        BattleWon = progress.BattleWon;
+        playtimeSeconds = Mathf.Max(0f, progress.PlaytimeSeconds);
+        return true;
     }
 
     /// <summary>Hands the screen to the battle while the chapter stays running.</summary>

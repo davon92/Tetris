@@ -28,6 +28,12 @@ public readonly struct StoryLine
 /// </summary>
 public interface IStoryScript
 {
+    /// <summary>
+    /// Stable identity for the chapter itself, written into save files so a
+    /// slot can be matched back to the script that produced it.
+    /// </summary>
+    string ChapterId { get; }
+
     /// <summary>Identifier handed to <see cref="StoryBattleBridge"/>.</summary>
     string BattleId { get; }
 

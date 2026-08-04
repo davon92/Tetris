@@ -74,6 +74,15 @@ grammar to adapt with original characters and artwork:
 - A playable Moon Gate prologue starring the original rivals Lyra and Bram:
   opening dialogue, one response choice, a named CPU encounter, win/loss
   dialogue, rematch, and return-to-menu flow.
+- Story Mode opens on a new game / load game page before the prologue starts,
+  backed by ten save slots.
+- A story pause menu (Escape or Start) with resume, save, load, and return to
+  title. Pressing pause again resumes; returning to the title asks first, and
+  overwriting an occupied slot asks first.
+- Per-chapter playtime tracking written into every slot alongside the chapter
+  title, the line the player stopped on, and a timestamp.
+- A statistics document recording total and story playtime, matches per mode,
+  and player one's win/loss record per character.
 - A 640×480 virtual presentation canvas that scales cleanly at modern
   resolutions. The battle HUD now includes next-piece previews, larger
   score/line/level panels, story character portraits, a versus badge, and a
@@ -86,7 +95,9 @@ grammar to adapt with original characters and artwork:
   visible magic attacks traveling between wells, garbage-impact bursts, and
   pixel-snapped board shake.
 - A `StoryBattleBridge` that lets dialogue request a named CPU battle and receive the result without depending on board internals.
-- EditMode coverage for bounds, line clearing, garbage, and the seven-bag invariant.
+- EditMode coverage for bounds, line clearing, garbage, the seven-bag
+  invariant, save/load round trips, slot recovery, pause-menu branching, title
+  navigation, and the statistics counters.
 
 ## Controls
 
@@ -109,11 +120,13 @@ grammar to adapt with original characters and artwork:
 ### Modes
 
 - Main menu: Story Mode, Versus CPU, or Versus Player
+- Story Mode: New Game or Load Game
 - Menu navigation: Arrow keys or W/S, Enter/Space to confirm, Escape to go back
 - Gamepad menu navigation: D-pad, South button to confirm, East button to go back
 - During development, 1/2/3 still jump directly to Solo/Versus CPU/Local Versus
 - R: Restart/rematch
-- Escape or a gamepad Start button: Return to the main menu
+- Escape or a gamepad Start button: open the pause menu in story mode, or
+  return to the main menu from a battle
 
 ## Story integration
 
@@ -142,7 +155,32 @@ Implementation sequence:
 3. Register a Yarn command that calls `StoryBattleBridge.RequestBattle`.
 4. Pause Yarn while the battle scene is active.
 5. Write the result to Yarn variable storage, return to the story scene, and continue the node.
-6. Save story variables, current node, settings, and unlocked battles.
+6. Add Yarn's variable storage and current node to `StorySaveData`, which
+   already persists chapter progress, playtime, and slot metadata.
+
+## Save data and statistics
+
+Both systems write JSON through one `IJsonStore` seam. `FileJsonStore` keeps a
+document per key under `persistentDataPath/saves`, writing to a temporary file
+and replacing the real one so an interrupted write cannot corrupt a slot.
+`MemoryJsonStore` backs the EditMode tests.
+
+- `SaveSlotCatalog` owns the ten story slots and caches a `SaveSlotInfo`
+  summary per slot, so drawing the list never touches the disk.
+- `StorySaveData` is the serialised payload: chapter id, beat, line index,
+  response, battle result, chapter playtime, a dialogue preview, and a UTC
+  timestamp. A slot from a newer build, or one that fails to parse, is listed
+  as damaged and refuses to load rather than throwing.
+- `StoryDirector.Capture`/`Restore` are the only seam between the chapter and
+  the save layer. Restore clamps every index against the current script, so
+  editing authored content cannot break an existing save, and it refuses a save
+  whose chapter id does not match.
+- `GameStats` accumulates counters in memory and flushes on meaningful beats —
+  match end, story save, returning to the title, quit, and once a minute of
+  play — so nothing writes to disk mid-match.
+
+When Yarn Spinner lands, its variable storage becomes another field on
+`StorySaveData`; the slot browser, pause menu, and catalog do not change.
 
 ## Battle rules to tune
 
@@ -162,8 +200,9 @@ Prove the complete match loop, CPU behavior, local controls, garbage exchange, a
 ### M2 — Story/battle vertical slice (playable)
 
 One original scene, two characters, one choice, one battle, and two outcome
-branches are playable. Next: migrate dialogue to Yarn Spinner, then add
-save/load and persistent story variables.
+branches are playable, with ten save slots, a pause menu, and playtime and
+match statistics. Next: migrate dialogue to Yarn Spinner and persist its
+variable storage into the existing save slots.
 
 ### M3 — Presentation pass
 

@@ -14,11 +14,15 @@ public static class MainMenuView
 
         int clicked = model.Page switch
         {
+            MainMenuPage.Story => DrawStoryPage(model, theme),
             MainMenuPage.SoloMode => DrawSoloModePage(model, theme),
             MainMenuPage.VersusMode => DrawVersusModePage(model, theme),
             MainMenuPage.CpuDifficulty => DrawDifficultyPage(model, theme),
             _ => DrawRootPage(model, theme)
         };
+
+        if (!string.IsNullOrEmpty(model.Message))
+            GUI.Label(new Rect(160f, 400f, 320f, 20f), model.Message, theme.Notice);
 
         MenuChromeView.DrawFooter(theme, MenuChromeView.ListHint);
         return clicked;
@@ -32,7 +36,7 @@ public static class MainMenuView
         // the 42px/66px pitch fits every detail line clear of the row beneath.
         int clicked = NoClick;
         if (DrawItem(theme, new Rect(178f, 152f, 284f, 42f),
-                "STORY MODE", "Begin the first adventure battle",
+                "STORY MODE", "New game, or continue a saved adventure",
                 MainMenuModel.StoryRow, model.Selection))
             clicked = MainMenuModel.StoryRow;
 
@@ -50,6 +54,31 @@ public static class MainMenuView
                 "OPTIONS", "Audio, graphics and controls",
                 MainMenuModel.OptionsRow, model.Selection))
             clicked = MainMenuModel.OptionsRow;
+
+        return clicked;
+    }
+
+    private static int DrawStoryPage(MainMenuModel model, RetroTheme theme)
+    {
+        GUI.Label(new Rect(160f, 127f, 320f, 28f), "STORY MODE", theme.MenuHeading);
+
+        int clicked = NoClick;
+        if (DrawItem(theme, new Rect(178f, 168f, 284f, 44f),
+                "NEW GAME", "Start the prologue from the beginning",
+                MainMenuModel.NewGameRow, model.Selection))
+            clicked = MainMenuModel.NewGameRow;
+
+        if (DrawItem(theme, new Rect(178f, 240f, 284f, 44f),
+                "LOAD GAME",
+                model.HasAnySave
+                    ? "Continue a saved adventure"
+                    : "No saved adventures yet",
+                MainMenuModel.LoadGameRow, model.Selection))
+            clicked = MainMenuModel.LoadGameRow;
+
+        if (DrawItem(theme, new Rect(178f, 344f, 284f, 38f),
+                "BACK", string.Empty, 2, model.Selection))
+            clicked = 2;
 
         return clicked;
     }

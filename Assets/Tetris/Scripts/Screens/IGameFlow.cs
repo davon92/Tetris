@@ -18,7 +18,23 @@ public interface IGameFlow
     /// <summary>Back out of options to the title menu row it was opened from.</summary>
     void CloseOptions();
 
+    /// <summary>Start the chapter from the beginning, discarding any run in progress.</summary>
     void BeginStory();
+
+    /// <summary>Open the save-slot browser from the title menu, in load mode.</summary>
+    void ShowLoadGame();
+
+    /// <summary>Back out of the load browser to the story page of the title menu.</summary>
+    void CloseLoadGame();
+
+    /// <summary>Write the running chapter to a slot. False when nothing was stored.</summary>
+    bool SaveStory(int slot);
+
+    /// <summary>
+    /// Restore a chapter from a slot and show the story screen. False when the
+    /// slot is empty, unreadable, or belongs to a different chapter.
+    /// </summary>
+    bool LoadStory(int slot);
 
     /// <summary>Ask the story bridge for this chapter's battle.</summary>
     void RequestStoryBattle();
