@@ -103,6 +103,92 @@ public class MainMenuModelTests
             Is.EqualTo(MainMenuIntent.OpenOptions));
     }
 
+    /// <summary>Options moved off the root page's default arm when quit was added.</summary>
+    [Test]
+    public void OptionsRow_StillOpensOptions()
+    {
+        MainMenuModel model = new MainMenuModel();
+
+        MainMenuCommand command = model.Activate(MainMenuModel.OptionsRow);
+
+        Assert.That(command.Intent, Is.EqualTo(MainMenuIntent.OpenOptions));
+    }
+
+    [Test]
+    public void QuitRow_OpensConfirm_WithoutQuitting()
+    {
+        MainMenuModel model = new MainMenuModel();
+        model.Select(MainMenuModel.QuitRow);
+
+        MainMenuCommand command = model.Activate();
+
+        Assert.That(command.Intent, Is.EqualTo(MainMenuIntent.None));
+        Assert.That(model.QuitConfirmActive, Is.True);
+    }
+
+    [Test]
+    public void QuitConfirm_OpensOnNo()
+    {
+        MainMenuModel model = new MainMenuModel();
+        model.ShowQuitConfirm();
+
+        Assert.That(model.Selection, Is.EqualTo(MainMenuModel.QuitNoRow));
+        Assert.That(model.ItemCount, Is.EqualTo(MainMenuModel.QuitConfirmItemCount));
+    }
+
+    [Test]
+    public void QuitConfirm_Yes_RequestsQuit()
+    {
+        MainMenuModel model = new MainMenuModel();
+        model.ShowQuitConfirm();
+
+        MainMenuCommand command = model.Activate(MainMenuModel.QuitYesRow);
+
+        Assert.That(command.Intent, Is.EqualTo(MainMenuIntent.QuitGame));
+    }
+
+    [Test]
+    public void QuitConfirm_No_ReturnsToRootOnQuitRow()
+    {
+        MainMenuModel model = new MainMenuModel();
+        model.ShowQuitConfirm();
+
+        MainMenuCommand command = model.Activate(MainMenuModel.QuitNoRow);
+
+        Assert.That(command.Intent, Is.EqualTo(MainMenuIntent.None));
+        Assert.That(model.Page, Is.EqualTo(MainMenuPage.Root));
+        Assert.That(model.Selection, Is.EqualTo(MainMenuModel.QuitRow));
+    }
+
+    [Test]
+    public void QuitConfirm_Back_DismissesToRootOnQuitRow()
+    {
+        MainMenuModel model = new MainMenuModel();
+        model.ShowQuitConfirm();
+
+        Assert.That(model.Back(), Is.True);
+        Assert.That(model.Page, Is.EqualTo(MainMenuPage.Root));
+        Assert.That(model.Selection, Is.EqualTo(MainMenuModel.QuitRow));
+    }
+
+    /// <summary>
+    /// Move wraps, so the row below Quit is Story again — nothing should fall
+    /// through to a quit just by holding down. Story now opens its own page
+    /// rather than starting the chapter outright.
+    /// </summary>
+    [Test]
+    public void RootWrapsPastQuit_WithoutQuitting()
+    {
+        MainMenuModel model = new MainMenuModel();
+        model.Select(MainMenuModel.QuitRow);
+
+        model.Move(1);
+
+        Assert.That(model.Selection, Is.EqualTo(MainMenuModel.StoryRow));
+        Assert.That(model.Activate().Intent, Is.EqualTo(MainMenuIntent.None));
+        Assert.That(model.Page, Is.EqualTo(MainMenuPage.Story));
+    }
+
     [Test]
     public void DifficultyPage_StillLeadsToCharacterSelect()
     {

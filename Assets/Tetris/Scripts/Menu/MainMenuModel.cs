@@ -8,7 +8,14 @@ public enum MainMenuPage
     Story,
     SoloMode,
     VersusMode,
-    CpuDifficulty
+    CpuDifficulty,
+
+    /// <summary>
+    /// The quit confirmation. A page rather than a flag so it inherits the
+    /// navigation, back handling and cursor restoration every other page gets.
+    /// The view draws it as a modal over the root list.
+    /// </summary>
+    QuitConfirm
 }
 
 public enum MainMenuIntent
@@ -20,7 +27,10 @@ public enum MainMenuIntent
     OpenLoadGame,
     StartSolo,
     OpenCharacterSelect,
-    OpenOptions
+    OpenOptions,
+
+    /// <summary>Confirmed at the modal: close the application.</summary>
+    QuitGame
 }
 
 /// <summary>What activating the current menu item asked the game to do.</summary>
@@ -52,6 +62,9 @@ public readonly struct MainMenuCommand
     public static MainMenuCommand OpenOptions =>
         new MainMenuCommand(MainMenuIntent.OpenOptions, TetrisGameMode.Marathon);
 
+    public static MainMenuCommand QuitGame =>
+        new MainMenuCommand(MainMenuIntent.QuitGame, TetrisGameMode.Marathon);
+
     public static MainMenuCommand StartSolo(TetrisGameMode soloMode)
     {
         return new MainMenuCommand(MainMenuIntent.StartSolo, soloMode);
@@ -69,11 +82,12 @@ public readonly struct MainMenuCommand
 /// </summary>
 public sealed class MainMenuModel
 {
-    public const int RootItemCount = 4;
+    public const int RootItemCount = 5;
     public const int StoryItemCount = 3;
     public const int SoloItemCount = 3;
     public const int VersusItemCount = 3;
     public const int DifficultyItemCount = 4;
+    public const int QuitConfirmItemCount = 2;
 
     // Rows are named because callers outside this class have to return the
     // cursor to the row a sub-page was opened from, and a bare literal there
@@ -82,6 +96,12 @@ public sealed class MainMenuModel
     public const int SoloRow = 1;
     public const int VersusRow = 2;
     public const int OptionsRow = 3;
+    public const int QuitRow = 4;
+
+    /// <summary>Rows on the quit modal. No is second so the cursor can default to it.</summary>
+    public const int QuitYesRow = 0;
+
+    public const int QuitNoRow = 1;
 
     /// <summary>Rows on the story sub-page, which the flow returns the cursor to.</summary>
     public const int NewGameRow = 0;
@@ -126,8 +146,12 @@ public sealed class MainMenuModel
         MainMenuPage.SoloMode => SoloItemCount,
         MainMenuPage.VersusMode => VersusItemCount,
         MainMenuPage.CpuDifficulty => DifficultyItemCount,
+        MainMenuPage.QuitConfirm => QuitConfirmItemCount,
         _ => RootItemCount
     };
+
+    /// <summary>The quit modal is up, so the view draws it over the root list.</summary>
+    public bool QuitConfirmActive => Page == MainMenuPage.QuitConfirm;
 
     public void ShowRoot(int selection = 0)
     {
@@ -163,6 +187,17 @@ public sealed class MainMenuModel
         Selection = (int)Difficulty;
     }
 
+    /// <summary>
+    /// Opens the quit modal on No. Quitting throws away whatever the player was
+    /// doing, so the cursor never starts on the destructive answer.
+    /// </summary>
+    public void ShowQuitConfirm()
+    {
+        Page = MainMenuPage.QuitConfirm;
+        Selection = QuitNoRow;
+        Message = string.Empty;
+    }
+
     public void Move(int delta)
     {
         int count = ItemCount;
@@ -194,6 +229,9 @@ public sealed class MainMenuModel
                 // lands one step up rather than all the way at the root.
                 ShowVersusMode(VersusCpuRow);
                 return true;
+            case MainMenuPage.QuitConfirm:
+                ShowRoot(QuitRow);
+                return true;
             default:
                 return false;
         }
@@ -215,6 +253,7 @@ public sealed class MainMenuModel
             MainMenuPage.SoloMode => ActivateSoloMode(),
             MainMenuPage.VersusMode => ActivateVersusMode(),
             MainMenuPage.CpuDifficulty => ActivateDifficulty(),
+            MainMenuPage.QuitConfirm => ActivateQuitConfirm(),
             _ => ActivateRoot()
         };
     }
@@ -232,9 +271,25 @@ public sealed class MainMenuModel
             case VersusRow:
                 ShowVersusMode();
                 return MainMenuCommand.None;
-            default:
+            case OptionsRow:
                 return MainMenuCommand.OpenOptions;
+            default:
+                ShowQuitConfirm();
+                return MainMenuCommand.None;
         }
+    }
+
+    /// <summary>
+    /// The only place that can produce a quit. Answering No behaves exactly
+    /// like backing out, so there is one way back to the root.
+    /// </summary>
+    private MainMenuCommand ActivateQuitConfirm()
+    {
+        if (Selection == QuitYesRow)
+            return MainMenuCommand.QuitGame;
+
+        ShowRoot(QuitRow);
+        return MainMenuCommand.None;
     }
 
     /// <summary>

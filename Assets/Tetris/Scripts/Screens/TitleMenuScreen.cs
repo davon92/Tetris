@@ -28,12 +28,17 @@ public sealed class TitleMenuScreen : IGameScreen
             return;
         }
 
-        if (input.Up)
+        // The quit modal lays its two answers out side by side, so it takes the
+        // horizontal axis as well; every other page is a vertical list.
+        bool previous = input.Up || (model.QuitConfirmActive && input.Left);
+        bool next = input.Down || (model.QuitConfirmActive && input.Right);
+
+        if (previous)
         {
             model.Move(-1);
             GameAudio.Play(GameSfx.MenuMove);
         }
-        else if (input.Down)
+        else if (next)
         {
             model.Move(1);
             GameAudio.Play(GameSfx.MenuMove);
@@ -74,6 +79,9 @@ public sealed class TitleMenuScreen : IGameScreen
                 break;
             case MainMenuIntent.OpenOptions:
                 flow.ShowOptions();
+                break;
+            case MainMenuIntent.QuitGame:
+                flow.QuitGame();
                 break;
         }
     }

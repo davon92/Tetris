@@ -47,4 +47,7 @@ public interface IGameFlow
 
     /// <summary>Replay the current match with the same setup.</summary>
     void RestartMatch();
+
+    /// <summary>Close the application. Only ever reached through a confirmation.</summary>
+    void QuitGame();
 }

@@ -16,6 +16,9 @@ public static class MenuChromeView
     public const string RosterHint =
         "LEFT / RIGHT TO CHOOSE    •    ENTER / A TO CONFIRM    •    ESC / B BACK";
 
+    public const string ConfirmHint =
+        "LEFT / RIGHT TO CHOOSE    •    ENTER / A TO CONFIRM    •    ESC / B CANCEL";
+
     private static readonly Rect NarrowPanel = new Rect(142f, 112f, 356f, 316f);
     private static readonly Rect WidePanel = new Rect(28f, 105f, 584f, 338f);
 

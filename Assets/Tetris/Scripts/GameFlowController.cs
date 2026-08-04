@@ -320,6 +320,27 @@ public sealed class GameFlowController : MonoBehaviour, IGameFlow
         StartMatch(matchDirector.Mode);
     }
 
+    /// <summary>
+    /// Flushes the profiles before closing. Settings and bindings already save
+    /// as they change, but PlayerPrefs is only guaranteed to reach disk on a
+    /// clean shutdown, and a player who quits from the menu should never lose
+    /// the rebind they just made. The statistics counters are deliberately
+    /// flushed here too rather than relying on OnApplicationQuit, which some
+    /// platforms skip.
+    /// </summary>
+    public void QuitGame()
+    {
+        GameSettings.Save();
+        PlayerInputProfiles.SaveAll();
+        stats?.Flush();
+
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
+    }
+
     /// <summary>Called by <see cref="StoryBattleBridge"/> once it has a battle to start.</summary>
     public void StartBattle(TetrisGameMode mode)
     {
