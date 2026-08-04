@@ -33,6 +33,14 @@ public enum PortraitMood
 public sealed class BattleVitals
 {
     private const float BarCatchUp = 6f;
+
+    /// <summary>
+    /// Slower than the health bar on purpose: the charge should still be
+    /// visibly climbing while the motes from the clear are landing on it, so
+    /// the bar reads as filled *by* them rather than alongside them.
+    /// </summary>
+    private const float ManaCatchUp = 4.2f;
+
     private const float ChargeDuration = 0.5f;
     private const float ReactionDuration = 0.75f;
     private const float StrainedThreshold = 0.62f;
@@ -50,7 +58,7 @@ public sealed class BattleVitals
     /// <summary>Smoothed <see cref="Recoverable"/> for drawing the bar.</summary>
     public float DisplayedRecoverable { get; private set; }
 
-    /// <summary>Spell charge, 0..1. Earned by clearing lines and gold mana cells.</summary>
+    /// <summary>Spell charge, 0..1. Earned by clearing lines and mana cells.</summary>
     public float Mana { get; private set; }
 
     /// <summary>Smoothed <see cref="Mana"/> for drawing the bar.</summary>
@@ -145,7 +153,8 @@ public sealed class BattleVitals
 
         // An exponential chase never quite arrives, which would leave a topped
         // out bar drawing a sliver short of full. Snap once it is close.
-        DisplayedMana = Mathf.Lerp(DisplayedMana, Mana, blend);
+        DisplayedMana = Mathf.Lerp(
+            DisplayedMana, Mana, 1f - Mathf.Exp(-ManaCatchUp * deltaTime));
         if (Mathf.Abs(DisplayedMana - Mana) < 0.004f)
             DisplayedMana = Mana;
 

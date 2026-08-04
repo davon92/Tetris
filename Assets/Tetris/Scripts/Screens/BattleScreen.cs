@@ -87,12 +87,14 @@ public sealed class BattleScreen : IGameScreen
         if (subscribe)
         {
             session.GarbageApplied += OnHurt;
+            session.LinesCleared += OnLinesCleared;
             session.AbilityResolved += OnSpellLanded;
             session.AbilityCast += OnCast;
         }
         else
         {
             session.GarbageApplied -= OnHurt;
+            session.LinesCleared -= OnLinesCleared;
             session.AbilityResolved -= OnSpellLanded;
             session.AbilityCast -= OnCast;
         }
@@ -101,6 +103,17 @@ public sealed class BattleScreen : IGameScreen
     private void OnHurt(TetrisGameSession session, int lines)
     {
         hudMotion.VitalsFor(session, match).React(PortraitMood.Hurt);
+    }
+
+    /// <summary>
+    /// Every block the clear removed becomes a mote that flies into this
+    /// player's own mana bar, so the charge the clear just paid has a visible
+    /// source. Runs from the event because the board's record of what it
+    /// removed only survives until the next placement.
+    /// </summary>
+    private void OnLinesCleared(TetrisGameSession session, int[] rows)
+    {
+        hudMotion.MotesFor(session, match).Spawn(session.Model);
     }
 
     /// <summary>A mend lands on the caster, so it reads as a cast, not a hit.</summary>

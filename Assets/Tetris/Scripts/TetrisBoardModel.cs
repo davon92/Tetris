@@ -6,11 +6,21 @@ public sealed class TetrisBoardModel
 {
     private readonly int[,] cells;
     private readonly List<int> lastClearedRows = new();
+    private readonly List<int> lastClearedCells = new();
 
     public int Width { get; }
     public int Height { get; }
     public int VisibleHeight { get; }
     public IReadOnlyList<int> LastClearedRows => lastClearedRows;
+
+    /// <summary>
+    /// The cell values the most recent clear removed, row-major over
+    /// <see cref="LastClearedRows"/> — the value at <c>row * Width + x</c>.
+    /// Views read it to send one particle per block in the colour that block
+    /// actually was. Only valid until the next placement, so read it from the
+    /// clear event rather than caching the list.
+    /// </summary>
+    public IReadOnlyList<int> LastClearedCells => lastClearedCells;
 
     public TetrisBoardModel(int width = 10, int height = 24, int visibleHeight = 20)
     {
@@ -32,6 +42,7 @@ public sealed class TetrisBoardModel
         VisibleHeight = source.VisibleHeight;
         cells = (int[,])source.cells.Clone();
         lastClearedRows.AddRange(source.lastClearedRows);
+        lastClearedCells.AddRange(source.lastClearedCells);
     }
 
     public int GetCell(int x, int y)
@@ -61,12 +72,12 @@ public sealed class TetrisBoardModel
     /// <summary>Cell value used for garbage rows.</summary>
     public const int GarbageCell = 8;
 
-    /// <summary>Cell value for a gold mana cell — clearing its row casts the owner's ability.</summary>
+    /// <summary>Cell value for a mana cell — clearing its row pays the owner extra charge.</summary>
     public const int ManaCell = 9;
 
     /// <summary>
-    /// How many gold mana cells the most recent clear removed. The charge a
-    /// clear is worth scales with this, so it is a count and not a flag.
+    /// How many mana cells the most recent clear removed. The charge a clear is
+    /// worth scales with this, so it is a count and not a flag.
     /// </summary>
     public int LastClearManaCells { get; private set; }
 
@@ -80,7 +91,7 @@ public sealed class TetrisBoardModel
 
     /// <summary>
     /// Places a piece; <paramref name="manaCellIndex"/> marks that index of the
-    /// piece's cells as a gold mana cell instead of its normal color.
+    /// piece's cells as a mana cell instead of its normal color.
     /// </summary>
     public int Place(TetriminoType type, Vector2Int position, int rotation, int manaCellIndex)
     {
@@ -341,6 +352,7 @@ public sealed class TetrisBoardModel
     private int ClearFullLines()
     {
         lastClearedRows.Clear();
+        lastClearedCells.Clear();
         LastClearManaCells = 0;
         int writeRow = 0;
         int cleared = 0;
@@ -363,6 +375,7 @@ public sealed class TetrisBoardModel
                 lastClearedRows.Add(readRow);
                 for (int x = 0; x < Width; x++)
                 {
+                    lastClearedCells.Add(cells[x, readRow]);
                     if (cells[x, readRow] == ManaCell)
                         LastClearManaCells++;
                 }

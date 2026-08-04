@@ -4,6 +4,22 @@ using UnityEngine;
 
 public sealed class TetrisGameSession : MonoBehaviour
 {
+    /// <summary>
+    /// A locked mana cell and its place in the rainbow, so the stack's mana
+    /// blocks keep cycling after the piece that dropped them is gone.
+    /// </summary>
+    private readonly struct ManaCellView
+    {
+        public ManaCellView(SpriteRenderer renderer, float phase)
+        {
+            Renderer = renderer;
+            Phase = phase;
+        }
+
+        public SpriteRenderer Renderer { get; }
+        public float Phase { get; }
+    }
+
     private readonly struct CellStyle
     {
         public CellStyle(Sprite sprite, Material material, Color color, Vector3 scale)
@@ -24,6 +40,7 @@ public sealed class TetrisGameSession : MonoBehaviour
 
     private readonly Dictionary<TetriminoType, TetriminoPiece> piecePrefabLookup = new();
     private readonly Dictionary<TetriminoType, CellStyle> cellStyleLookup = new();
+    private readonly List<ManaCellView> lockedManaCells = new();
 
     private const int ManaPieceInterval = 6;
     private const int ManaSpawnPercent = 45;
@@ -31,10 +48,11 @@ public sealed class TetrisGameSession : MonoBehaviour
     /// <summary>Pool size for a fighter who does not override it.</summary>
     private const int DefaultManaCapacity = 100;
 
-    /// <summary>Charge for each gold cell a clear takes with it, on top of the line payout.</summary>
+    /// <summary>Charge for each mana cell a clear takes with it, on top of the line payout.</summary>
     private const int ManaPerManaCell = 25;
 
-    private static readonly Color ManaColor = new Color(1f, 0.84f, 0.25f);
+    /// <summary>How solid the landing preview draws. Shared by the tint passes.</summary>
+    private const float GhostAlpha = 0.22f;
 
     private SevenBagRandomizer randomizer;
     private SharedPieceQueue sharedPieceQueue;
@@ -521,7 +539,7 @@ public sealed class TetrisGameSession : MonoBehaviour
             AttackGenerated?.Invoke(this, attack);
 
         // Clears charge the bar instead of casting outright. Bigger clears pay
-        // far more, and a gold cell riding along pays more still — so it stays
+        // far more, and a mana cell riding along pays more still — so it stays
         // worth both building for four and steering the mana block into it.
         GainMana(ManaForLines(cleared) + manaCellsCleared * ManaPerManaCell);
 
@@ -620,8 +638,9 @@ public sealed class TetrisGameSession : MonoBehaviour
         lockTimer = 0f;
         PieceSerial++;
 
-        // One cell of some pieces is a gold mana cell: clearing the row it
-        // ends up in casts this player's spell, so it is worth steering.
+        // One cell of some pieces is a mana cell, drawn in the same rainbow as
+        // a charged bar: clearing the row it ends up in pays a fat lump of
+        // charge, so it is worth steering.
         ActiveManaCell = piecesSinceMana >= ManaPieceInterval &&
                          manaRandom.Next(100) < ManaSpawnPercent
             ? manaRandom.Next(TetrominoDefinitions.GetCells(type, 0).Length)
@@ -739,7 +758,7 @@ public sealed class TetrisGameSession : MonoBehaviour
             pieceCells,
             ghostPosition,
             ghostY != int.MinValue);
-        ApplyManaTint(ghostPieceView, 0.22f);
+        ApplyManaTint(ghostPieceView, GhostAlpha);
     }
 
     private void EnsurePieceViews()
@@ -764,13 +783,15 @@ public sealed class TetrisGameSession : MonoBehaviour
 
         ghostPieceView = Instantiate(prefab, ghostRoot, false);
         ghostPieceView.name = $"{ActiveType} Ghost";
-        ghostPieceView.ConfigureRuntime(ActiveType, 10, 0.22f, battleGrid);
+        ghostPieceView.ConfigureRuntime(ActiveType, 10, GhostAlpha, battleGrid);
     }
 
     private void RefreshLockedView()
     {
         for (int i = lockedRoot.childCount - 1; i >= 0; i--)
             Destroy(lockedRoot.GetChild(i).gameObject);
+
+        lockedManaCells.Clear();
 
         for (int y = 0; y < Model.VisibleHeight; y++)
         {
@@ -780,13 +801,18 @@ public sealed class TetrisGameSession : MonoBehaviour
                 if (cell == 0)
                     continue;
 
-                SpriteRenderer renderer = CreateLockedCellRenderer($"Cell {x},{y}", lockedRoot, cell);
+                SpriteRenderer renderer = CreateLockedCellRenderer(x, y, cell);
                 renderer.transform.localPosition = CellPosition(x, y);
+
+                // Kept so the rainbow keeps turning after the piece that
+                // dropped this cell is long gone.
+                if (cell == TetrisBoardModel.ManaCell)
+                    lockedManaCells.Add(new ManaCellView(renderer, ManaPhase(x, y)));
             }
         }
     }
 
-    private SpriteRenderer CreateLockedCellRenderer(string objectName, Transform parent, int cellValue)
+    private SpriteRenderer CreateLockedCellRenderer(int x, int y, int cellValue)
     {
         TetriminoType type = cellValue >= 1 && cellValue <= 7
             ? (TetriminoType)(cellValue - 1)
@@ -801,8 +827,8 @@ public sealed class TetrisGameSession : MonoBehaviour
             }
         }
 
-        GameObject cellObject = new GameObject(objectName);
-        cellObject.transform.SetParent(parent, false);
+        GameObject cellObject = new GameObject($"Cell {x},{y}");
+        cellObject.transform.SetParent(lockedRoot, false);
         cellObject.transform.localScale = style.Scale == Vector3.zero ? Vector3.one : style.Scale;
         SpriteRenderer renderer = cellObject.AddComponent<SpriteRenderer>();
         renderer.sprite = style.Sprite != null ? style.Sprite : GetCellSprite();
@@ -812,7 +838,7 @@ public sealed class TetrisGameSession : MonoBehaviour
         renderer.color = cellValue switch
         {
             TetrisBoardModel.GarbageCell => new Color(0.48f, 0.52f, 0.6f),
-            TetrisBoardModel.ManaCell => ManaColor,
+            TetrisBoardModel.ManaCell => ManaVisuals.Cell(ManaPhase(x, y), 1f),
             _ => style.Color
         };
         return renderer;
@@ -876,9 +902,10 @@ public sealed class TetrisGameSession : MonoBehaviour
     }
 
     /// <summary>
-    /// Repaints the mana cell gold so the player can see which block is worth
-    /// steering into a line. Runs every frame the piece view refreshes because
-    /// the piece prefab is recreated whenever the type changes.
+    /// Repaints the mana cell with the same rainbow the charged mana bar runs,
+    /// so the player can see which block is worth steering into a line and what
+    /// it pays into. Runs every frame the piece view refreshes because the piece
+    /// prefab is recreated whenever the type changes.
     /// </summary>
     private void ApplyManaTint(TetriminoPiece piece, float alpha)
     {
@@ -891,15 +918,70 @@ public sealed class TetrisGameSession : MonoBehaviour
             if (renderers[i] == null)
                 continue;
 
-            Color color = i == ActiveManaCell
-                ? ManaColor
-                : cellStyleLookup.TryGetValue(ActiveType, out CellStyle style)
-                    ? style.Color
-                    : renderers[i].color;
+            if (i == ActiveManaCell)
+            {
+                renderers[i].color = ManaVisuals.Cell(ActiveManaPhase, alpha);
+                continue;
+            }
+
+            Color color = cellStyleLookup.TryGetValue(ActiveType, out CellStyle style)
+                ? style.Color
+                : renderers[i].color;
 
             renderers[i].color = new Color(color.r, color.g, color.b, alpha);
         }
     }
+
+    /// <summary>
+    /// Drives the rainbow. The stack's mana blocks and the falling one have to
+    /// keep cycling between the events that repaint them, and this is presentation
+    /// only — the simulation still advances solely through <see cref="Tick"/>.
+    /// </summary>
+    private void LateUpdate()
+    {
+        if (!initialized)
+            return;
+
+        for (int i = 0; i < lockedManaCells.Count; i++)
+        {
+            ManaCellView cell = lockedManaCells[i];
+            if (cell.Renderer != null)
+                cell.Renderer.color = ManaVisuals.Cell(cell.Phase, 1f);
+        }
+
+        if (ActiveManaCell < 0)
+            return;
+
+        TintActiveManaCell(activePieceView, 1f);
+        TintActiveManaCell(ghostPieceView, GhostAlpha);
+    }
+
+    private void TintActiveManaCell(TetriminoPiece piece, float alpha)
+    {
+        if (piece == null)
+            return;
+
+        SpriteRenderer[] renderers = piece.GetVisualRenderers();
+        if (ActiveManaCell >= renderers.Length || renderers[ActiveManaCell] == null)
+            return;
+
+        renderers[ActiveManaCell].color = ManaVisuals.Cell(ActiveManaPhase, alpha);
+    }
+
+    /// <summary>
+    /// Rainbow offset for a cell, spread over the board so mana blocks sitting
+    /// next to each other never cycle in lockstep.
+    /// </summary>
+    private static float ManaPhase(int x, int y)
+    {
+        return Mathf.Repeat(x * 0.13f + y * 0.07f, 1f);
+    }
+
+    /// <summary>
+    /// The falling mana cell's offset. Keyed to the piece rather than a board
+    /// square so the colour does not jump every time the player moves it.
+    /// </summary>
+    private float ActiveManaPhase => Mathf.Repeat(PieceSerial * 0.17f, 1f);
 
     private static void SetPieceVisible(TetriminoPiece piece, bool visible)
     {

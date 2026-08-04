@@ -75,10 +75,19 @@ public sealed class BattleHudMotion
     public BattleVitals PlayerOneVitals { get; } = new BattleVitals();
     public BattleVitals PlayerTwoVitals { get; } = new BattleVitals();
 
+    public ManaMoteField PlayerOneMotes { get; } = new ManaMoteField();
+    public ManaMoteField PlayerTwoMotes { get; } = new ManaMoteField();
+
     /// <summary>Routes a session's reaction to the matching seat's face.</summary>
     public BattleVitals VitalsFor(TetrisGameSession session, MatchDirector match)
     {
         return match != null && session == match.PlayerTwo ? PlayerTwoVitals : PlayerOneVitals;
+    }
+
+    /// <summary>Routes a session's clear to the motes that feed its own bar.</summary>
+    public ManaMoteField MotesFor(TetrisGameSession session, MatchDirector match)
+    {
+        return match != null && session == match.PlayerTwo ? PlayerTwoMotes : PlayerOneMotes;
     }
 
     /// <summary>Upcoming pieces for the NEXT queue, nearest first. Never null.</summary>
@@ -102,6 +111,8 @@ public sealed class BattleHudMotion
         ResetSeat(PlayerTwo);
         PlayerOneVitals.Reset();
         PlayerTwoVitals.Reset();
+        PlayerOneMotes.Reset();
+        PlayerTwoMotes.Reset();
         Upcoming = Array.Empty<TetriminoType>();
         upcomingSourceOne = null;
         upcomingSourceTwo = null;
@@ -118,6 +129,8 @@ public sealed class BattleHudMotion
         TickSeat(PlayerTwo, two, deltaTime);
         PlayerOneVitals.Tick(one, deltaTime);
         PlayerTwoVitals.Tick(two, deltaTime);
+        PlayerOneMotes.Tick(deltaTime);
+        PlayerTwoMotes.Tick(deltaTime);
         RefreshUpcoming(one, two);
         RefreshSoloReadouts(solo);
     }

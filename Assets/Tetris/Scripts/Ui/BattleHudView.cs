@@ -69,6 +69,17 @@ public static class BattleHudView
     private const float SeatBannerHeight = 18f;
     private const float HelpRowTop = 460f;
 
+    // Named because the mana motes have to fly to the same rects the bars are
+    // drawn in; a bar that moved without its target would break the effect.
+    private static readonly Rect LeftManaBar = new Rect(8f, 333f, 108f, 14f);
+    private static readonly Rect RightManaBar = new Rect(524f, 333f, 108f, 14f);
+    private static readonly Rect SoloManaBar = new Rect(160f, 250f, 72f, 14f);
+
+    /// <summary>How many stale samples trail a mana mote, and how far back each sits.</summary>
+    private const int TrailSamples = 2;
+
+    private const float TrailSpacing = 0.055f;
+
     public const int NoClick = -1;
 
     /// <summary>
@@ -280,8 +291,10 @@ public static class BattleHudView
 
         // The CPU seat gets no key prompt — nobody is pressing anything there.
         bool humanTwo = match.Mode == TetrisGameMode.LocalVersus;
-        DrawManaBar(new Rect(8f, 333f, 108f, 14f), motion.PlayerOneVitals, false, theme);
-        DrawManaBar(new Rect(524f, 333f, 108f, 14f), motion.PlayerTwoVitals, true, theme);
+        DrawManaBar(LeftManaBar, motion.PlayerOneVitals,
+            motion.PlayerOneMotes.AbsorbStrength, false, theme);
+        DrawManaBar(RightManaBar, motion.PlayerTwoVitals,
+            motion.PlayerTwoMotes.AbsorbStrength, true, theme);
 
         DrawNameplate(new Rect(8f, 347f, 108f, 25f), left.DisplayName, left.Accent, theme);
         DrawNameplate(new Rect(524f, 347f, 108f, 25f), right.DisplayName, right.Accent, theme);
@@ -315,6 +328,13 @@ public static class BattleHudView
             match.PlayerTwo, motion.PlayerTwo, theme);
 
         DrawBattleBlinker(match, theme);
+
+        // Late in the pass so the motes fly over the gutter furniture they
+        // cross rather than disappearing behind the portraits and chips.
+        DrawManaMotes(LeftBoard, LeftManaBar, motion.PlayerOneMotes,
+            motion.PlayerOneVitals, false);
+        DrawManaMotes(RightBoard, RightManaBar, motion.PlayerTwoMotes,
+            motion.PlayerTwoVitals, true);
 
         DrawToast(LeftBoard, match.PlayerOneCallout, match.PlayerOneCalloutAge,
             match.PlayerOneCalloutTimeLeft, false, theme);
@@ -355,7 +375,8 @@ public static class BattleHudView
 
         DrawHealthBar(new Rect(160f, 234f, 72f, 14f), motion.PlayerOneVitals,
             RetroPalette.Gold, false, theme);
-        DrawManaBar(new Rect(160f, 250f, 72f, 14f), motion.PlayerOneVitals, false, theme);
+        DrawManaBar(SoloManaBar, motion.PlayerOneVitals,
+            motion.PlayerOneMotes.AbsorbStrength, false, theme);
 
         // Solo has no opponent, so only the defensive spell is castable.
         DrawSpellPlate(
@@ -374,6 +395,9 @@ public static class BattleHudView
 
         DrawSeatPlate(SeatPlateRect(SoloBoard), "PLAYER 1", RetroPalette.SeatOne,
             player, motion.PlayerOne, theme);
+
+        DrawManaMotes(SoloBoard, SoloManaBar, motion.PlayerOneMotes,
+            motion.PlayerOneVitals, false);
 
         DrawToast(SoloBoard, match.PlayerOneCallout, match.PlayerOneCalloutAge,
             match.PlayerOneCalloutTimeLeft, false, theme);
@@ -655,13 +679,14 @@ public static class BattleHudView
 
     /// <summary>
     /// The blue charge bar under the health bar. Line clears fill it — bigger
-    /// clears and gold mana cells pay more — and a full bar goes rainbow and
-    /// pulses, which is the tell that the cast key will actually fire.
+    /// clears and mana cells pay more — and a full bar goes rainbow and pulses,
+    /// which is the tell that the cast key will actually fire.
     /// Player two's bar fills right-to-left so both read outward from center.
     /// </summary>
     private static void DrawManaBar(
         Rect rect,
         BattleVitals vitals,
+        float absorb,
         bool mirrored,
         RetroTheme theme)
     {
@@ -677,11 +702,7 @@ public static class BattleHudView
 
         RetroGui.Fill(rect, RetroPalette.ManaTrack);
 
-        const float Inset = 2f;
-        Rect inner = new Rect(
-            rect.x + Inset, rect.y + Inset,
-            rect.width - Inset * 2f, rect.height - Inset * 2f);
-
+        Rect inner = ManaBarInner(rect);
         float fillWidth = inner.width * Mathf.Clamp01(vitals.DisplayedMana);
         Rect fill = mirrored
             ? new Rect(inner.xMax - fillWidth, inner.y, fillWidth, inner.height)
@@ -690,17 +711,56 @@ public static class BattleHudView
         if (!vitals.SpellReady)
         {
             DrawChargingMana(fill, mirrored);
+            DrawManaAbsorb(inner, fill, absorb, mirrored);
             DrawCostTicks(inner, vitals, mirrored);
             RetroGui.Border(rect, RetroPalette.ManaBorder, 1f);
             return;
         }
 
         DrawChargedMana(fill);
+        DrawManaAbsorb(inner, fill, absorb, mirrored);
         DrawCostTicks(inner, vitals, mirrored);
 
         float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 7f);
         RetroGui.Border(inner, new Color(1f, 1f, 1f, 0.2f + 0.35f * pulse), 1f);
         RetroGui.Border(rect, Color.Lerp(RetroPalette.ManaBorder, Color.white, pulse), 1f);
+    }
+
+    /// <summary>The track inside the bar's frame — where the fill and the notches live.</summary>
+    private static Rect ManaBarInner(Rect rect)
+    {
+        const float Inset = 2f;
+        return new Rect(
+            rect.x + Inset, rect.y + Inset,
+            rect.width - Inset * 2f, rect.height - Inset * 2f);
+    }
+
+    /// <summary>
+    /// The point the motes fly at: the leading edge of the fill, so they land
+    /// exactly where the bar is growing rather than at some fixed spot on it.
+    /// </summary>
+    private static Vector2 ManaFillEdge(Rect rect, float charge, bool mirrored)
+    {
+        Rect inner = ManaBarInner(rect);
+        float offset = inner.width * Mathf.Clamp01(charge);
+        return new Vector2(
+            mirrored ? inner.xMax - offset : inner.x + offset,
+            inner.center.y);
+    }
+
+    /// <summary>A white bloom at the fill edge for each mote the bar just swallowed.</summary>
+    private static void DrawManaAbsorb(Rect inner, Rect fill, float absorb, bool mirrored)
+    {
+        if (absorb <= 0f)
+            return;
+
+        float width = Mathf.Round(2f + 4f * absorb);
+        float edge = mirrored ? fill.x : fill.xMax;
+        float x = Mathf.Clamp(edge - width * 0.5f, inner.x, inner.xMax - width);
+
+        RetroGui.Fill(
+            new Rect(Mathf.Round(x), inner.y, width, inner.height),
+            new Color(1f, 1f, 1f, 0.65f * absorb));
     }
 
     /// <summary>
@@ -751,7 +811,9 @@ public static class BattleHudView
     /// <summary>
     /// Charged: a scrolling rainbow with a shine sweeping over it. IMGUI has no
     /// gradients, so the rainbow is a handful of flat slices with a moving hue —
-    /// cheap, and it only ever runs while a spell is actually armed.
+    /// cheap, and it only ever runs while a spell is actually armed. The hue
+    /// comes from <see cref="ManaVisuals"/>, the same source the mana blocks and
+    /// their motes draw from, because the resemblance is the whole point.
     /// </summary>
     private static void DrawChargedMana(Rect fill)
     {
@@ -762,10 +824,9 @@ public static class BattleHudView
         float sliceWidth = fill.width / Slices;
         for (int i = 0; i < Slices; i++)
         {
-            float hue = Mathf.Repeat(Time.unscaledTime * 0.45f + i / (float)Slices * 0.8f, 1f);
             RetroGui.Fill(
                 new Rect(fill.x + sliceWidth * i, fill.y, sliceWidth + 1f, fill.height),
-                Color.HSVToRGB(hue, 0.72f, 1f));
+                ManaVisuals.Hue(i / (float)Slices * 0.8f));
         }
 
         float sweep = Mathf.Repeat(Time.unscaledTime * 0.7f, 1.4f) / 1.4f;
@@ -773,6 +834,105 @@ public static class BattleHudView
         RetroGui.Fill(
             new Rect(Mathf.Lerp(fill.x, fill.xMax - shineWidth, sweep), fill.y, shineWidth, fill.height),
             new Color(1f, 1f, 1f, 0.4f));
+    }
+
+    /// <summary>
+    /// Flies the clear's motes from the blocks they came from into the mana
+    /// bar. Each arcs out and away first, then accelerates in — the pull is
+    /// what says the bar is taking the charge, not just receiving it.
+    /// </summary>
+    private static void DrawManaMotes(
+        Rect board,
+        Rect bar,
+        ManaMoteField field,
+        BattleVitals vitals,
+        bool mirrored)
+    {
+        if (field.Count == 0)
+            return;
+
+        Vector2 target = ManaFillEdge(bar, vitals.DisplayedMana, mirrored);
+
+        for (int i = 0; i < field.Count; i++)
+        {
+            ManaMoteField.Mote mote = field[i];
+            float progress = mote.Progress;
+            if (progress < 0f)
+                continue;
+
+            Vector2 start = new Vector2(
+                board.x + mote.U * board.width,
+                board.yMax - mote.V * board.height);
+            Vector2 control = (start + target) * 0.5f + new Vector2(mote.ArcX, mote.ArcY);
+
+            Color color = mote.IsMana
+                ? ManaVisuals.Cell(mote.Phase, 1f)
+                : mote.Color;
+
+            // The trail is drawn first and behind, oldest sample faintest.
+            for (int step = TrailSamples; step >= 1; step--)
+            {
+                float trailProgress = progress - step * TrailSpacing;
+                if (trailProgress <= 0f)
+                    continue;
+
+                DrawMoteQuad(
+                    Bezier(start, control, target, Ease(trailProgress)),
+                    MoteSize(mote, trailProgress) - step,
+                    new Color(color.r, color.g, color.b, 0.4f / step));
+            }
+
+            // Only the last stretch fades, so the mote reads as landing in the
+            // bar rather than expiring somewhere short of it.
+            float alpha = 1f - 0.45f * Mathf.InverseLerp(0.88f, 1f, progress);
+            DrawMoteQuad(
+                Bezier(start, control, target, Ease(progress)),
+                MoteSize(mote, progress),
+                new Color(color.r, color.g, color.b, alpha));
+
+            if (mote.IsMana)
+            {
+                DrawMoteQuad(
+                    Bezier(start, control, target, Ease(progress)),
+                    MoteSize(mote, progress) - 2f,
+                    new Color(1f, 1f, 1f, 0.8f * alpha));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Quadratic ease-in: the mote hangs at the block it came from for a beat
+    /// before the bar yanks it in. Linear motion reads as drifting.
+    /// </summary>
+    private static float Ease(float progress)
+    {
+        return progress * progress;
+    }
+
+    private static Vector2 Bezier(Vector2 start, Vector2 control, Vector2 end, float t)
+    {
+        float inverse = 1f - t;
+        return inverse * inverse * start + 2f * inverse * t * control + t * t * end;
+    }
+
+    private static float MoteSize(ManaMoteField.Mote mote, float progress)
+    {
+        return Mathf.Round(Mathf.Lerp(mote.Size, 1f, progress));
+    }
+
+    /// <summary>Pixel-snapped so the motes stay as crisp as the rest of the HUD.</summary>
+    private static void DrawMoteQuad(Vector2 center, float size, Color color)
+    {
+        if (size < 1f || color.a <= 0f)
+            return;
+
+        RetroGui.Fill(
+            new Rect(
+                Mathf.Round(center.x - size * 0.5f),
+                Mathf.Round(center.y - size * 0.5f),
+                size,
+                size),
+            color);
     }
 
     /// <summary>
